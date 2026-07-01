@@ -132,7 +132,7 @@ jobs:
           Return ONLY a Markdown report of violations and suggestions. If perfect, return "✅ Pass".
           EOF
           CONTEXT=$(cat context_file.txt)
-          gh copilot suggest -t shell "$(cat prompt_1.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_1.md
+          ollama launch copilot --model glm-5.2:cloud "$(cat prompt_1.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_1.md
 
       - name: Review 2 - Security (SAST)
         env:
@@ -147,7 +147,7 @@ jobs:
           Return ONLY a Markdown report of security risks. If no risks, return "✅ Pass".
           EOF
           CONTEXT=$(cat context_file.txt)
-          gh copilot suggest -t shell "$(cat prompt_2.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_2.md
+          ollama launch copilot --model glm-5.2:cloud "$(cat prompt_2.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_2.md
 
       - name: Review 3 - Code Smells
         env:
@@ -163,7 +163,7 @@ jobs:
           Return ONLY a Markdown report detailing code smells. If clean, return "✅ Pass".
           EOF
           CONTEXT=$(cat context_file.txt)
-          gh copilot suggest -t shell "$(cat prompt_3.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_3.md
+          ollama launch copilot --model glm-5.2:cloud "$(cat prompt_3.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_3.md
 
       - name: Review 4 - Performance
         env:
@@ -179,7 +179,7 @@ jobs:
           Return ONLY a Markdown report of performance bottlenecks. If optimized, return "✅ Pass".
           EOF
           CONTEXT=$(cat context_file.txt)
-          gh copilot suggest -t shell "$(cat prompt_4.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_4.md
+          ollama launch copilot --model glm-5.2:cloud "$(cat prompt_4.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_4.md
 
       - name: Review 5 - Testability
         env:
@@ -195,7 +195,7 @@ jobs:
           Return ONLY a Markdown report on testability. If reliable, return "✅ Pass".
           EOF
           CONTEXT=$(cat context_file.txt)
-          gh copilot suggest -t shell "$(cat prompt_5.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_5.md
+          ollama launch copilot --model glm-5.2:cloud "$(cat prompt_5.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_5.md
 
       - name: Review 6 - Architecture
         env:
@@ -210,7 +210,7 @@ jobs:
           Return ONLY a Markdown report on architecture. If well-architected, return "✅ Pass".
           EOF
           CONTEXT=$(cat context_file.txt)
-          gh copilot suggest -t shell "$(cat prompt_6.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_6.md
+          ollama launch copilot --model glm-5.2:cloud "$(cat prompt_6.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_6.md
 
       - name: Combine Review Reports
         run: |
