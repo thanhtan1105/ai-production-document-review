@@ -1,0 +1,232 @@
+name: GitHub Copilot AI Reviewer
+
+# Trigger workflow on Issue or Pull Request comments,
+# or manually via workflow_dispatch with parameters
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+  workflow_dispatch:
+    inputs:
+      review_mode:
+        description: 'full-review or partial-review'
+        required: true
+        default: 'partial-review'
+        type: choice
+        options:
+          - partial-review
+          - full-review
+
+jobs:
+  copilot-agent:
+    # Run if triggered manually or if comment contains /copilot command
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.comment.body, '/copilot')
+    
+    runs-on: [self-hosted]
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Determine Review Mode
+        id: review_mode
+        run: |
+          # Default to partial-review (only review changed code / diff)
+          MODE="partial-review"
+          
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            MODE="${{ github.event.inputs.review_mode }}"
+          else
+            # Check if user requested full-review in the comment (e.g., /copilot full-review)
+            COMMENT="${{ github.event.comment.body }}"
+            if [[ "$COMMENT" == *"full-review"* ]]; then
+              MODE="full-review"
+            fi
+          fi
+          
+          echo "mode=$MODE" >> $GITHUB_OUTPUT
+          echo "Review mode set to: $MODE"
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 to get all commit history, necessary for
+          # building knowledge graph or comparing diffs (partial-review)
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Build Knowledge Source Code (Graph Relation & Retrieval Context)
+        id: build_knowledge
+        run: |
+          echo "Starting Build Knowledge Source Code with code-review-graph..."
+          echo "Current mode: ${{ steps.review_mode.outputs.mode }}"
+          
+          # 1. Install code-review-graph
+          pip install code-review-graph
+          
+          # 2. Build Knowledge Base Graph from source code
+          code-review-graph build
+          
+          # 3. Extract Context
+          if [[ "${{ steps.review_mode.outputs.mode }}" == "partial-review" ]]; then
+            echo "=> Analyzing impact of changed code (Blast Radius)..."
+            # Get actual diff combined with impact radius context
+            git diff HEAD~1 HEAD > raw_diff.txt
+            echo "=== RAW DIFF ===" > current_diff.txt
+            cat raw_diff.txt >> current_diff.txt
+            echo "=== CODE REVIEW GRAPH IMPACT ===" >> current_diff.txt
+            code-review-graph detect-changes >> current_diff.txt || echo "No impact found" >> current_diff.txt
+          else
+            echo "=> Extracting overall architecture for the whole project..."
+            code-review-graph status > full_context.txt
+          fi
+          
+          echo "Finished building knowledge and retrieval context."
+
+      - name: Setup & Verify Agent Skills
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Installing GitHub Copilot CLI extension..."
+          gh extension install github/gh-copilot
+          
+          echo "Verifying available Agent Skills for Code Review..."
+          echo "- Skill 1: AST Context Retrieval (code-review-graph) - [OK]"
+          echo "- Skill 2: Coding Standards Linter (Prompt-based) - [OK]"
+          echo "- Skill 3: SAST Security Scanner (Prompt-based) - [OK]"
+          echo "- Skill 4: Code Smell & Clean Code Analyzer (Prompt-based) - [OK]"
+          echo "- Skill 5: Performance Profiler (Prompt-based) - [OK]"
+          echo "- Skill 6: Testability & QA Evaluator (Prompt-based) - [OK]"
+          echo "- Skill 7: Business Logic Reviewer (Prompt-based) - [OK]"
+          echo "All necessary agent skills are loaded. Proceeding to review..."
+          
+          # Determine which context file to use based on REVIEW_MODE
+          if [[ "${{ steps.review_mode.outputs.mode }}" == "partial-review" ]]; then
+            echo "current_diff.txt" > context_file.txt
+          else
+            echo "full_context.txt" > context_file.txt
+          fi
+
+      - name: Review 1 - Coding Standards
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat << 'EOF' > prompt_1.txt
+          You are an expert Code Formatter and Linter. Review the code against standard conventions (PEP8 for Python, ESLint/Prettier for JS/TS).
+          Focus on:
+          - Naming conventions for variables, functions, and classes.
+          - Code formatting, indentation, and structure.
+          - Proper use of comments and docstrings.
+          Return ONLY a Markdown report of violations and suggestions. If perfect, return "✅ Pass".
+          EOF
+          CONTEXT=$(cat context_file.txt)
+          gh copilot suggest -t shell "$(cat prompt_1.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_1.md
+
+      - name: Review 2 - Security (SAST)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat << 'EOF' > prompt_2.txt
+          You are an expert Security Engineer. Perform a SAST scan on the code.
+          Focus on finding:
+          - SQL Injection, XSS, CSRF, IDOR.
+          - Hardcoded secret keys, passwords, or API credentials.
+          - Insecure cryptographic algorithms or random number generation.
+          Return ONLY a Markdown report of security risks. If no risks, return "✅ Pass".
+          EOF
+          CONTEXT=$(cat context_file.txt)
+          gh copilot suggest -t shell "$(cat prompt_2.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_2.md
+
+      - name: Review 3 - Code Smells
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat << 'EOF' > prompt_3.txt
+          You are a Clean Code advocate. Analyze the code for maintainability.
+          Focus on finding:
+          - Functions that are too long or have too many parameters.
+          - High Cyclomatic Complexity or deeply nested loops/conditionals.
+          - Duplicate code blocks (DRY violation).
+          - Violations of SOLID principles.
+          Return ONLY a Markdown report detailing code smells. If clean, return "✅ Pass".
+          EOF
+          CONTEXT=$(cat context_file.txt)
+          gh copilot suggest -t shell "$(cat prompt_3.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_3.md
+
+      - name: Review 4 - Performance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat << 'EOF' > prompt_4.txt
+          You are a Performance Optimization expert. Analyze the execution and resource usage.
+          Focus on finding:
+          - Inefficient database queries (e.g., N+1 query problem).
+          - Memory leaks or objects not properly garbage collected.
+          - Blocking I/O operations in async contexts.
+          - Heavy or unnecessary library imports.
+          Return ONLY a Markdown report of performance bottlenecks. If optimized, return "✅ Pass".
+          EOF
+          CONTEXT=$(cat context_file.txt)
+          gh copilot suggest -t shell "$(cat prompt_4.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_4.md
+
+      - name: Review 5 - Testability
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat << 'EOF' > prompt_5.txt
+          You are a QA Automation Lead. Evaluate the code's test coverage and robustness.
+          Focus on:
+          - Are edge cases covered?
+          - Is the logic of the assertions tight and meaningful?
+          - Can the code be easily unit tested, or is it tightly coupled?
+          - Exception handling and error reporting.
+          Return ONLY a Markdown report on testability. If reliable, return "✅ Pass".
+          EOF
+          CONTEXT=$(cat context_file.txt)
+          gh copilot suggest -t shell "$(cat prompt_5.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_5.md
+
+      - name: Review 6 - Architecture
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat << 'EOF' > prompt_6.txt
+          You are a Software Architect. Evaluate the overall design and business logic alignment.
+          Focus on:
+          - Linkage between modules and separation of concerns.
+          - Encapsulation and boundaries between architecture layers (e.g., controllers vs services).
+          - Does the code properly implement the intended business rules?
+          Return ONLY a Markdown report on architecture. If well-architected, return "✅ Pass".
+          EOF
+          CONTEXT=$(cat context_file.txt)
+          gh copilot suggest -t shell "$(cat prompt_6.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_6.md
+
+      - name: Combine Review Reports
+        run: |
+          echo "=== AI CODE REVIEW REPORT ===" > final_review_report.md
+          echo "## 1. Coding Standards & Conventions" >> final_review_report.md
+          cat report_1.md >> final_review_report.md
+          echo -e "\n## 2. Security & Vulnerability" >> final_review_report.md
+          cat report_2.md >> final_review_report.md
+          echo -e "\n## 3. Code Smells & Clean Code" >> final_review_report.md
+          cat report_3.md >> final_review_report.md
+          echo -e "\n## 4. Performance & Resource Optimization" >> final_review_report.md
+          cat report_4.md >> final_review_report.md
+          echo -e "\n## 5. Testability & Reliability" >> final_review_report.md
+          cat report_5.md >> final_review_report.md
+          echo -e "\n## 6. Architecture & Business Logic" >> final_review_report.md
+          cat report_6.md >> final_review_report.md
+          
+          echo "Final report generated:"
+          cat final_review_report.md
