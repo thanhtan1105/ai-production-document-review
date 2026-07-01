@@ -177,24 +177,40 @@ Start now by calling get_diff.
 
     print(f"\nStarting review for skill: '{target_skill}'\n")
 
+    report_path = f"report_{target_skill}.md"
+
     try:
         result = agent.invoke(
             {"messages": [HumanMessage(content=user_message)]},
-            config={"recursion_limit": 30},
+            config={"recursion_limit": 100},
         )
 
         # Print all messages from the agent run
         for msg in result.get("messages", []):
             msg_type = type(msg).__name__
             if hasattr(msg, "content") and msg.content:
-                content_preview = str(msg.content)[:300]
+                content_preview = str(msg.content)[:500]
                 print(f"[{msg_type}]: {content_preview}")
-
-        print("\nAgent completed successfully.")
 
     except Exception as e:
         print(f"\nAgent encountered an error: {e}")
         raise SystemExit(1)
+
+    # --- Guard: verify the report was actually written ---
+    print(f"\n--- Verifying report was generated: {report_path} ---")
+    if not os.path.exists(report_path):
+        print(f"ERROR: Agent finished but '{report_path}' was NOT created.")
+        print("The agent likely hit the recursion limit or failed to call write_report.")
+        print("Failing this step to prevent silent incomplete reviews.")
+        raise SystemExit(1)
+
+    report_size = os.path.getsize(report_path)
+    if report_size == 0:
+        print(f"ERROR: '{report_path}' exists but is empty (0 bytes).")
+        raise SystemExit(1)
+
+    print(f"Report verified: '{report_path}' ({report_size} bytes)")
+    print(f"\nReview for '{target_skill}' completed successfully.")
 
 
 # ---------------------------------------------------------------------------
