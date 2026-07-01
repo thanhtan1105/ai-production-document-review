@@ -114,6 +114,20 @@ jobs:
           echo "Public Skills:"
           ls -1 .agent-skills/public/ 2>/dev/null | sed 's/^/- /' || echo "- None"
 
+      - name: Load Step Prompts
+        run: |
+          echo "Loading Step Prompts into runner workspace..."
+          mkdir -p .agent-prompts
+
+          if [ -d ".github/step_prompts" ]; then
+            cp -r .github/step_prompts/* .agent-prompts/
+            echo "=== Successfully Loaded Step Prompts ==="
+            ls -1 .agent-prompts/ | sed 's/^/- /'
+          else
+            echo "ERROR: .github/step_prompts directory not found!"
+            exit 1
+          fi
+
       - name: Setup & Verify Agent Skills
         env:
           GH_TOKEN: ${{ github.token }}
@@ -148,42 +162,42 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Starting Python ReAct Agent for Coding Standards..."
-          python3 .github/scripts/react_agent.py --skill coding-standards --prompt-file .github/step_prompts/coding-standards.txt
+          python3 .github/scripts/react_agent.py --skill coding-standards --prompt-file .agent-prompts/coding-standards.txt
 
       - name: Review 2 - Security (SAST)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Starting Python ReAct Agent for Security..."
-          python3 .github/scripts/react_agent.py --skill security --prompt-file .github/step_prompts/security.txt
+          python3 .github/scripts/react_agent.py --skill security --prompt-file .agent-prompts/security.txt
 
       - name: Review 3 - Code Smells
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Starting Python ReAct Agent for Clean Code..."
-          python3 .github/scripts/react_agent.py --skill clean-code --prompt-file .github/step_prompts/clean-code.txt
+          python3 .github/scripts/react_agent.py --skill clean-code --prompt-file .agent-prompts/clean-code.txt
 
       - name: Review 4 - Performance
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Starting Python ReAct Agent for Performance..."
-          python3 .github/scripts/react_agent.py --skill performance --prompt-file .github/step_prompts/performance.txt
+          python3 .github/scripts/react_agent.py --skill performance --prompt-file .agent-prompts/performance.txt
 
       - name: Review 5 - Testability
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Starting Python ReAct Agent for Testability..."
-          python3 .github/scripts/react_agent.py --skill testability --prompt-file .github/step_prompts/testability.txt
+          python3 .github/scripts/react_agent.py --skill testability --prompt-file .agent-prompts/testability.txt
 
       - name: Review 6 - Architecture
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Starting Python ReAct Agent for Architecture..."
-          python3 .github/scripts/react_agent.py --skill architecture --prompt-file .github/step_prompts/architecture.txt
+          python3 .github/scripts/react_agent.py --skill architecture --prompt-file .agent-prompts/architecture.txt
 
       - name: Combine Review Reports
         run: |
