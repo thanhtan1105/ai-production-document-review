@@ -244,6 +244,15 @@ Start now by calling get_diff.
 
     print(f"\nReview for '{target_skill}' completed successfully.")
 
+    # --- Print report content to log for quick debugging ---
+    separator = "=" * 60
+    print(f"\n{separator}")
+    print(f"  REPORT: {report_path}")
+    print(f"{separator}")
+    with open(report_path, "r") as f:
+        print(f.read())
+    print(f"{separator}\n")
+
 
 # ---------------------------------------------------------------------------
 # ENTRYPOINT
