@@ -76,15 +76,16 @@ jobs:
         run: |
           echo "Installing latest LangChain + LangGraph stack..."
           pip install --quiet \
+            "langchain" \
             "langchain-core" \
             "langchain-ollama" \
             "langgraph"
           echo "Installed versions:"
-          pip show langchain-core langchain-ollama langgraph | grep -E "^(Name|Version):"
+          pip show langchain langchain-core langchain-ollama langgraph | grep -E "^(Name|Version):"
           echo "Verifying imports..."
           python3 -c 'from langchain_core.tools import tool; print("langchain_core.tools OK")'
           python3 -c 'from langchain_ollama import ChatOllama; print("langchain_ollama OK")'
-          python3 -c 'from langgraph.prebuilt import create_react_agent; print("langgraph.prebuilt OK")'
+          python3 -c 'from langchain.agents import create_react_agent; print("langchain.agents OK")'
           echo "Setup Agent Dependencies completed."
 
       - name: Build Knowledge Source Code (Graph Relation & Retrieval Context)

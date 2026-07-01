@@ -1,9 +1,8 @@
 """
-LangGraph ReAct Code Review Agent
-Uses LangGraph's prebuilt ReAct agent (modern replacement for AgentExecutor)
-with ChatOllama for local LLM inference.
+LangChain ReAct Code Review Agent
+Uses LangChain's create_react_agent with ChatOllama for local LLM inference.
 
-Compatible with: langchain-core>=0.3, langchain-ollama>=0.2, langgraph>=0.2
+Stack: langchain (latest), langchain-ollama (latest), langgraph (latest)
 """
 
 import os
@@ -12,8 +11,8 @@ import argparse
 
 from langchain_core.tools import tool
 from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.prebuilt import create_react_agent
+from langchain_core.messages import HumanMessage
+from langchain.agents import create_react_agent
 
 
 # ---------------------------------------------------------------------------
