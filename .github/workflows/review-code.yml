@@ -18,6 +18,15 @@ on:
         options:
           - partial-review
           - full-review
+      review_target:
+        description: "Which folder to review"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - backend
+          - frontend
 
 jobs:
   copilot-agent:
@@ -37,27 +46,53 @@ jobs:
     env:
       OLLAMA_MODEL: "glm-5.2:cloud"
       OLLAMA_BASE_URL: "http://localhost:11434"
+      REVIEW_TARGET: "all"
 
     steps:
-      - name: Determine Review Mode
+      - name: Determine Review Mode & Target
         id: review_mode
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
-          # Default to partial-review (only review changed code / diff)
+          # --- Review Mode ---
           MODE="partial-review"
-
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             MODE="${{ github.event.inputs.review_mode }}"
           else
-            # Check if user requested full-review in the comment
             if [[ "$COMMENT_BODY" == *"full-review"* ]]; then
               MODE="full-review"
             fi
           fi
-
           echo "mode=$MODE" >> $GITHUB_OUTPUT
           echo "Review mode set to: $MODE"
+
+          # --- Review Target (which folders to scope the diff to) ---
+          # workflow_dispatch: use the dropdown input
+          # PR/issue comment: parse '/copilot backend', '/copilot frontend', etc.
+          TARGET="all"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TARGET="${{ github.event.inputs.review_target }}"
+          else
+            if [[ "$COMMENT_BODY" == *"backend"* && "$COMMENT_BODY" != *"frontend"* ]]; then
+              TARGET="backend"
+            elif [[ "$COMMENT_BODY" == *"frontend"* && "$COMMENT_BODY" != *"backend"* ]]; then
+              TARGET="frontend"
+            elif [[ "$COMMENT_BODY" == *"backend"* && "$COMMENT_BODY" == *"frontend"* ]]; then
+              TARGET="all"
+            fi
+          fi
+
+          # Build the git pathspec for the target
+          case "$TARGET" in
+            backend)  PATHSPEC="backend/" ;;
+            frontend) PATHSPEC="frontend/" ;;
+            *)        PATHSPEC="" ;; # empty = review everything
+          esac
+
+          echo "target=$TARGET" >> $GITHUB_OUTPUT
+          echo "pathspec=$PATHSPEC" >> $GITHUB_OUTPUT
+          echo "Review target set to: $TARGET (pathspec: '${PATHSPEC:-all files}')"
+
 
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -93,6 +128,9 @@ jobs:
         run: |
           echo "Starting Build Knowledge Source Code with code-review-graph..."
           echo "Current mode: ${{ steps.review_mode.outputs.mode }}"
+          echo "Review target: ${{ steps.review_mode.outputs.target }}"
+
+          PATHSPEC="${{ steps.review_mode.outputs.pathspec }}"
 
           # 1. Install code-review-graph
           pip install code-review-graph
@@ -100,27 +138,26 @@ jobs:
           # 2. Build Knowledge Base Graph from source code
           code-review-graph build
 
-          # 3. Extract Context
+          # 3. Extract Context — scoped to PATHSPEC if set
           if [[ "${{ steps.review_mode.outputs.mode }}" == "partial-review" ]]; then
-            echo "=> Analyzing impact of changed code (Blast Radius)..."
-            # Get actual diff combined with impact radius context
-            git diff HEAD~1 HEAD > raw_diff.txt
-            echo "=== RAW DIFF ===" > current_diff.txt
+            echo "=> Analyzing changed code (scope: ${PATHSPEC:-all files})..."
+            git diff HEAD~1 HEAD -- $PATHSPEC > raw_diff.txt
+            echo "=== RAW DIFF (target: ${{ steps.review_mode.outputs.target }}) ===" > current_diff.txt
             cat raw_diff.txt >> current_diff.txt
             echo "=== CODE REVIEW GRAPH IMPACT ===" >> current_diff.txt
             code-review-graph detect-changes >> current_diff.txt || echo "No impact found" >> current_diff.txt
             echo "current_diff.txt" > context_file.txt
           else
-            echo "=> Extracting full project context for full-review..."
-            # Always include actual git diff so agent has real code to analyze
-            echo "=== GIT DIFF (last 3 commits) ===" > full_context.txt
-            git diff HEAD~3 HEAD >> full_context.txt || git diff HEAD~1 HEAD >> full_context.txt
+            echo "=> Extracting full context (scope: ${PATHSPEC:-all files})..."
+            echo "=== GIT DIFF (last 3 commits | target: ${{ steps.review_mode.outputs.target }}) ===" > full_context.txt
+            git diff HEAD~3 HEAD -- $PATHSPEC >> full_context.txt || git diff HEAD~1 HEAD -- $PATHSPEC >> full_context.txt
             echo "" >> full_context.txt
             echo "=== PROJECT GRAPH STRUCTURE ===" >> full_context.txt
             code-review-graph status >> full_context.txt || echo "Graph not available" >> full_context.txt
             echo "full_context.txt" > context_file.txt
           fi
 
+          echo "REVIEW_TARGET=${{ steps.review_mode.outputs.target }}" >> $GITHUB_ENV
           echo "Finished building knowledge and retrieval context."
 
       - name: Pull & Load Agent Skills
