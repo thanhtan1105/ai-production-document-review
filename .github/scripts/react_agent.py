@@ -184,37 +184,64 @@ Start now by calling get_diff.
 
     report_path = f"report_{target_skill}.md"
 
-    try:
-        result = agent.invoke(
-            {"messages": [HumanMessage(content=user_message)]},
-            config={"recursion_limit": 100},
-        )
+    # ---------------------------------------------------------------------------
+    # RETRY LOOP — max 20 attempts
+    # Each attempt runs the agent; if the report is not created (agent ran out
+    # of steps or failed to call write_report), retry with a fresh invocation.
+    # ---------------------------------------------------------------------------
+    MAX_ATTEMPTS = 20
+    success = False
 
-        # Print all messages from the agent run
-        for msg in result.get("messages", []):
-            msg_type = type(msg).__name__
-            if hasattr(msg, "content") and msg.content:
-                content_preview = str(msg.content)[:500]
-                print(f"[{msg_type}]: {content_preview}")
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        print(f"\n{'='*50}")
+        print(f"  Attempt {attempt}/{MAX_ATTEMPTS} — skill: '{target_skill}'")
+        print(f"{'='*50}")
 
-    except Exception as e:
-        print(f"\nAgent encountered an error: {e}")
+        # Remove stale report from a previous failed attempt so we can detect
+        # whether this attempt actually wrote it.
+        if os.path.exists(report_path):
+            os.remove(report_path)
+
+        try:
+            result = agent.invoke(
+                {"messages": [HumanMessage(content=user_message)]},
+                config={"recursion_limit": 100},
+            )
+
+            # Print agent messages
+            for msg in result.get("messages", []):
+                msg_type = type(msg).__name__
+                if hasattr(msg, "content") and msg.content:
+                    content_preview = str(msg.content)[:500]
+                    print(f"  [{msg_type}]: {content_preview}")
+
+        except Exception as e:
+            print(f"  [Attempt {attempt}] Agent raised an exception: {e}")
+            if attempt == MAX_ATTEMPTS:
+                print("All attempts exhausted with exceptions. Failing.")
+                raise SystemExit(1)
+            print(f"  Retrying... ({attempt + 1}/{MAX_ATTEMPTS})")
+            continue
+
+        # --- Check if the report was written this attempt ---
+        if os.path.exists(report_path) and os.path.getsize(report_path) > 0:
+            report_size = os.path.getsize(report_path)
+            print(f"\n  Report verified: '{report_path}' ({report_size} bytes)")
+            print(f"  Review for '{target_skill}' completed on attempt {attempt}/{MAX_ATTEMPTS}.")
+            success = True
+            break
+        else:
+            print(f"\n  [Attempt {attempt}] Report NOT created — agent did not call write_report.")
+            if attempt < MAX_ATTEMPTS:
+                print(f"  Retrying... ({attempt + 1}/{MAX_ATTEMPTS})")
+            else:
+                print("  All attempts exhausted. Failing.")
+
+    if not success:
+        print(f"\nERROR: '{report_path}' was not generated after {MAX_ATTEMPTS} attempts.")
+        print("The agent consistently failed to complete the review. Check model/Ollama logs.")
         raise SystemExit(1)
 
-    # --- Guard: verify the report was actually written ---
-    print(f"\n--- Verifying report was generated: {report_path} ---")
-    if not os.path.exists(report_path):
-        print(f"ERROR: Agent finished but '{report_path}' was NOT created.")
-        print("The agent likely hit the recursion limit or failed to call write_report.")
-        print("Failing this step to prevent silent incomplete reviews.")
-        raise SystemExit(1)
-
-    report_size = os.path.getsize(report_path)
-    if report_size == 0:
-        print(f"ERROR: '{report_path}' exists but is empty (0 bytes).")
-        raise SystemExit(1)
-
-    print(f"Report verified: '{report_path}' ({report_size} bytes)")
     print(f"\nReview for '{target_skill}' completed successfully.")
 
 
