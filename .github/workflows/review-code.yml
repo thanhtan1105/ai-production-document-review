@@ -97,7 +97,7 @@ jobs:
 
       - name: Setup & Verify Agent Skills
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Install GitHub CLI (gh) dynamically if it's missing on the self-hosted runner
           if ! command -v gh &> /dev/null; then
@@ -131,7 +131,7 @@ jobs:
 
       - name: Review 1 - Coding Standards
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           cat << 'EOF' > prompt_1.txt
           You are an expert Code Formatter and Linter. Review the code against standard conventions (PEP8 for Python, ESLint/Prettier for JS/TS).
@@ -146,7 +146,7 @@ jobs:
 
       - name: Review 2 - Security (SAST)
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           cat << 'EOF' > prompt_2.txt
           You are an expert Security Engineer. Perform a SAST scan on the code.
@@ -161,7 +161,7 @@ jobs:
 
       - name: Review 3 - Code Smells
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           cat << 'EOF' > prompt_3.txt
           You are a Clean Code advocate. Analyze the code for maintainability.
@@ -177,7 +177,7 @@ jobs:
 
       - name: Review 4 - Performance
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           cat << 'EOF' > prompt_4.txt
           You are a Performance Optimization expert. Analyze the execution and resource usage.
@@ -193,7 +193,7 @@ jobs:
 
       - name: Review 5 - Testability
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           cat << 'EOF' > prompt_5.txt
           You are a QA Automation Lead. Evaluate the code's test coverage and robustness.
@@ -209,7 +209,7 @@ jobs:
 
       - name: Review 6 - Architecture
         env:
-          GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           cat << 'EOF' > prompt_6.txt
           You are a Software Architect. Evaluate the overall design and business logic alignment.
