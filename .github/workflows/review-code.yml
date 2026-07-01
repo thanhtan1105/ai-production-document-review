@@ -109,9 +109,16 @@ jobs:
             cat raw_diff.txt >> current_diff.txt
             echo "=== CODE REVIEW GRAPH IMPACT ===" >> current_diff.txt
             code-review-graph detect-changes >> current_diff.txt || echo "No impact found" >> current_diff.txt
+            echo "current_diff.txt" > context_file.txt
           else
-            echo "=> Extracting overall architecture for the whole project..."
-            code-review-graph status > full_context.txt
+            echo "=> Extracting full project context for full-review..."
+            # Always include actual git diff so agent has real code to analyze
+            echo "=== GIT DIFF (last 3 commits) ===" > full_context.txt
+            git diff HEAD~3 HEAD >> full_context.txt || git diff HEAD~1 HEAD >> full_context.txt
+            echo "" >> full_context.txt
+            echo "=== PROJECT GRAPH STRUCTURE ===" >> full_context.txt
+            code-review-graph status >> full_context.txt || echo "Graph not available" >> full_context.txt
+            echo "full_context.txt" > context_file.txt
           fi
 
           echo "Finished building knowledge and retrieval context."

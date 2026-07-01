@@ -12,7 +12,7 @@ import argparse
 from langchain_core.tools import tool
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
-from langchain.agents import create_react_agent
+from langgraph.prebuilt import create_react_agent  # noqa: LangGraph prebuilt (latest)
 
 
 # ---------------------------------------------------------------------------
@@ -22,8 +22,10 @@ from langchain.agents import create_react_agent
 @tool
 def get_diff(input: str = "") -> str:
     """
-    Returns the full code diff or context that needs to be reviewed.
-    Call this FIRST before doing any analysis. No input required.
+    Returns the code diff and context to be reviewed.
+    IMPORTANT: Call this with NO arguments. Do not pass any kwargs.
+    Correct usage: get_diff (no input)
+    Wrong usage: get_diff(format='unified') <- DO NOT do this
     """
     try:
         with open("context_file.txt", "r") as f:
@@ -32,6 +34,9 @@ def get_diff(input: str = "") -> str:
             content = diff_file.read()
         if not content.strip():
             return "Warning: The diff/context file is empty. Nothing to review."
+        # Show a preview so the agent knows it received real content
+        preview = content[:200].replace('\n', ' ')
+        print(f"[get_diff] Read {len(content)} chars from '{target_filename}'. Preview: {preview}...")
         return content
     except FileNotFoundError as e:
         return f"Error: Could not read context file. Details: {str(e)}"
