@@ -148,63 +148,99 @@ jobs:
             echo "full_context.txt" > context_file.txt
           fi
 
-      - name: Review 1 - Coding Standards
+      - name: Build General Skills Catalog
+        run: |
+          cat << 'EOF' > build_catalog.py
+          import os
+          import re
+          
+          catalog = []
+          for root, dirs, files in os.walk('.agent-skills'):
+              if 'SKILL.md' in files:
+                  filepath = os.path.join(root, 'SKILL.md')
+                  with open(filepath, 'r') as f:
+                      content = f.read()
+                      if content.startswith('---'):
+                          parts = content.split('---', 2)
+                          if len(parts) >= 3:
+                              fm = parts[1]
+                              name_match = re.search(r'^name:\s*(.+)$', fm, re.MULTILINE)
+                              desc_match = re.search(r'^description:\s*(.+)$', fm, re.MULTILINE)
+                              if name_match and desc_match:
+                                  name = name_match.group(1).strip()
+                                  desc = desc_match.group(1).strip()
+                                  catalog.append(f"- Skill Name: {name}\n  Description: {desc}\n  Path: {filepath}")
+          
+          with open('GENERAL_SKILLS_CATALOG.txt', 'w') as f:
+              f.write("\n\n".join(catalog))
+          EOF
+          python3 build_catalog.py
+          echo "Generated GENERAL_SKILLS_CATALOG.txt:"
+          cat GENERAL_SKILLS_CATALOG.txt
+
+      - name: Agentic Router (Select Skills)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          cat << 'EOF' > router_prompt.txt
+          You are an AI Orchestrator. Your task is to select the most relevant code review skills from the catalog to analyze the following code.
+          
+          === SKILLS CATALOG ===
+          EOF
+          cat GENERAL_SKILLS_CATALOG.txt >> router_prompt.txt
+          cat << 'EOF' >> router_prompt.txt
+          
+          Based on the code changes below, which skills are necessary to review this code?
+          Respond ONLY with a comma-separated list of the "Skill Name"s you have chosen (e.g. coding-standards, security-sast).
+          Do not include any other text, reasoning, or markdown formatting.
+          If no skills are relevant, respond with "NONE".
+          EOF
+          
           CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/coding-standards/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_1.md
+          echo "=> Asking Orchestrator LLM to select skills..."
+          ollama launch copilot --model glm-5.2:cloud -- "$(cat router_prompt.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > chosen_skills_raw.txt
+          
+          # Clean output
+          cat chosen_skills_raw.txt | sed 's/`//g' > chosen_skills.txt
+          echo "=> Chosen Skills:"
+          cat chosen_skills.txt
 
-      - name: Review 2 - Security (SAST)
+      - name: Execution Loop (Run Selected Skills)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/security/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_2.md
-
-      - name: Review 3 - Code Smells
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/clean-code/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_3.md
-
-      - name: Review 4 - Performance
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/performance/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_4.md
-
-      - name: Review 5 - Testability
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/testability/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_5.md
-
-      - name: Review 6 - Architecture
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/architecture/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_6.md
-
-      - name: Combine Review Reports
         run: |
           echo "=== AI CODE REVIEW REPORT ===" > final_review_report.md
-          echo "## 1. Coding Standards & Conventions" >> final_review_report.md
-          cat report_1.md >> final_review_report.md
-          echo -e "\n## 2. Security & Vulnerability" >> final_review_report.md
-          cat report_2.md >> final_review_report.md
-          echo -e "\n## 3. Code Smells & Clean Code" >> final_review_report.md
-          cat report_3.md >> final_review_report.md
-          echo -e "\n## 4. Performance & Resource Optimization" >> final_review_report.md
-          cat report_4.md >> final_review_report.md
-          echo -e "\n## 5. Testability & Reliability" >> final_review_report.md
-          cat report_5.md >> final_review_report.md
-          echo -e "\n## 6. Architecture & Business Logic" >> final_review_report.md
-          cat report_6.md >> final_review_report.md
-
+          
+          CHOSEN=$(cat chosen_skills.txt)
+          if [[ "$CHOSEN" == *"NONE"* || -z "$CHOSEN" ]]; then
+            echo "No relevant skills selected. Skipping review."
+            echo "No relevant skills selected by the router. Skipping review." >> final_review_report.md
+            exit 0
+          fi
+          
+          IFS=',' read -ra SKILL_ARRAY <<< "$CHOSEN"
+          CONTEXT=$(cat context_file.txt)
+          
+          for SKILL_NAME in "${SKILL_ARRAY[@]}"; do
+            # Trim whitespace
+            SKILL_NAME=$(echo "$SKILL_NAME" | xargs)
+            if [ -z "$SKILL_NAME" ]; then continue; fi
+            
+            echo "=> Executing Skill: $SKILL_NAME"
+            
+            # Find path in catalog
+            SKILL_PATH=$(grep -A 2 "- Skill Name: $SKILL_NAME" GENERAL_SKILLS_CATALOG.txt | grep "Path:" | sed 's/.*Path: //' || true)
+            
+            if [ -n "$SKILL_PATH" ] && [ -f "$SKILL_PATH" ]; then
+              echo "## Skill Review: $SKILL_NAME" >> final_review_report.md
+              echo "Running $SKILL_PATH..."
+              ollama launch copilot --model glm-5.2:cloud -- "$(cat $SKILL_PATH) \n\n === CODE === \n\n $(cat $CONTEXT)" > "report_${SKILL_NAME}.md"
+              cat "report_${SKILL_NAME}.md" >> final_review_report.md
+              echo -e "\n\n" >> final_review_report.md
+            else
+              echo "Warning: Could not find SKILL.md for $SKILL_NAME"
+            fi
+          done
+          
           echo "Final report generated:"
           cat final_review_report.md
