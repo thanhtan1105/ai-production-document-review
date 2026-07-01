@@ -2,6 +2,7 @@ import os
 import re
 import subprocess
 import sys
+import argparse
 
 # --- TOOLS ---
 
@@ -35,8 +36,8 @@ def list_skills():
         return "No skills found in .agent-skills/"
     return "\n\n".join(catalog)
 
-def run_skill(skill_name):
-    """Executes a specific review skill."""
+def read_skill(skill_name):
+    """Reads the prompt of a specific review skill."""
     path = ""
     for root, dirs, files in os.walk('.agent-skills'):
         if skill_name in root and 'SKILL.md' in files:
@@ -49,38 +50,22 @@ def run_skill(skill_name):
     try:
         with open(path, 'r') as f:
             prompt = f.read()
-        diff = get_diff()
-        
-        full_prompt = f"{prompt}\n\n=== CODE ===\n\n{diff}"
-        
-        print(f"      [Tool] Calling Ollama for skill: {skill_name}...")
-        result = subprocess.run(
-            ["ollama", "launch", "copilot", "--model", "glm-5.2:cloud", "--", full_prompt],
-            capture_output=True, text=True
-        )
-        
-        if result.returncode != 0:
-            return f"Error executing review: {result.stderr}"
-            
-        with open('final_review_report.md', 'a') as f:
-            f.write(f"\n## Review by {skill_name}\n")
-            f.write(result.stdout)
-            f.write("\n\n")
-            
-        return f"Successfully executed {skill_name}. Report appended."
+        return prompt
     except Exception as e:
-        return f"Exception while running skill: {str(e)}"
+        return f"Exception while reading skill: {str(e)}"
 
 TOOLS = {
     "get_diff": get_diff,
     "list_skills": list_skills,
-    "run_skill": run_skill,
+    "read_skill": read_skill,
 }
 
 # --- AGENT CORE ---
 
-SYSTEM_PROMPT = """You are an autonomous Code Review Orchestrator Agent.
-Your goal is to analyze the provided code changes and decide which review skills to apply.
+def get_system_prompt(target_skill):
+    prompt = f"""You are an autonomous Code Review Agent acting as a specialist in '{target_skill}'.
+Your goal is to analyze the provided code changes specifically focusing on '{target_skill}'.
+
 You have access to the following tools:
 
 1. get_diff: 
@@ -91,76 +76,97 @@ You have access to the following tools:
    Description: Returns a catalog of available code review skills.
    Usage: list_skills
    
-3. run_skill:
-   Description: Executes a specific review skill on the code and saves the report.
-   Usage: run_skill <skill_name>
+3. read_skill:
+   Description: Reads the specific instructions/prompt for a skill.
+   Usage: read_skill <skill_name>
 
-4. finish:
-   Description: Ends the review process when you are done.
+4. write_report:
+   Description: Writes your final review findings to the report.
+   Usage: write_report <markdown_content>
+
+5. finish:
+   Description: Ends the review process. Call this ONLY after writing your report.
    Usage: finish
 
 You MUST use the following exact format for your responses:
 Thought: think about what to do next
-Action: the name of the tool to use (one of get_diff, list_skills, run_skill, finish)
-Action Input: the input to the tool (if any, omit if none)
+Action: the name of the tool to use (get_diff, list_skills, read_skill, write_report, finish)
+Action Input: the input to the tool (if any, omit if none. For write_report, put your markdown here)
 
 Wait for the "Observation: ..." response before continuing.
 
 Begin!"""
+    return prompt
 
-def call_llm(history):
-    prompt = SYSTEM_PROMPT + "\n\n" + history
+def call_llm(system_prompt, history):
+    prompt = system_prompt + "\n\n" + history
     result = subprocess.run(
         ["ollama", "launch", "copilot", "--model", "glm-5.2:cloud", "--", prompt],
         capture_output=True, text=True
     )
     return result.stdout
 
-def run_agent():
+def run_agent(target_skill):
     print("===========================================")
-    print("🚀 Starting Python ReAct Agent (Tool-Capable)")
+    print(f"🚀 Starting Python ReAct Agent for Skill: {target_skill}")
     print("===========================================")
     
+    system_prompt = get_system_prompt(target_skill)
     history = ""
     max_steps = 10
-    
-    # Initialize report
-    with open('final_review_report.md', 'w') as f:
-        f.write("=== AI CODE REVIEW REPORT (ReAct Agent) ===\n")
         
     for step in range(max_steps):
         print(f"\n--- [Step {step + 1}] Thinking ---")
-        response = call_llm(history)
+        response = call_llm(system_prompt, history)
         print(response)
         
         history += response + "\n"
         
         action_match = re.search(r'Action:\s*(.+)', response)
-        action_input_match = re.search(r'Action Input:\s*(.*)', response)
+        # We use re.DOTALL to capture multi-line inputs for write_report
+        action_input_match = re.search(r'Action Input:\s*(.*)', response, re.DOTALL)
         
         if action_match:
             action = action_match.group(1).strip()
-            action_input = action_input_match.group(1).strip() if action_input_match else ""
+            # If there's another "Thought:" or "Observation:" in the input match, we should trim it
+            action_input = ""
+            if action_input_match:
+                raw_input = action_input_match.group(1).strip()
+                # Stop parsing input if the LLM hallucinated an Observation block
+                if "Observation:" in raw_input:
+                    raw_input = raw_input.split("Observation:")[0].strip()
+                action_input = raw_input
             
             if action == "finish":
                 print("\n✅ Agent finished successfully.")
                 break
                 
-            print(f"\n⚙️  Executing Tool: {action}('{action_input}')")
+            print(f"\n⚙️  Executing Tool: {action}")
             
-            if action in TOOLS:
+            if action == "write_report":
+                try:
+                    with open(f'report_{target_skill}.md', 'w') as f:
+                        f.write(action_input)
+                    observation = f"Report saved successfully to report_{target_skill}.md"
+                except Exception as e:
+                    observation = f"Error saving report: {e}"
+            elif action in TOOLS:
                 observation = TOOLS[action](action_input) if action_input else TOOLS[action]()
             else:
                 observation = f"Error: Tool '{action}' not found."
                 
             # Truncate observation for console to avoid spam
-            preview = observation[:150].replace('\n', ' ') + "..." if len(observation) > 150 else observation
+            preview = str(observation)[:150].replace('\n', ' ') + "..." if len(str(observation)) > 150 else str(observation)
             print(f"👁️  Observation: {preview}")
             
             history += f"Observation: {observation}\n"
         else:
             print("\n⚠️  No action found in response. Halting to prevent loop.")
             break
-            
+
 if __name__ == "__main__":
-    run_agent()
+    parser = argparse.ArgumentParser(description="Run ReAct Code Review Agent")
+    parser.add_argument("--skill", required=True, help="The skill to execute (e.g., security, clean-code)")
+    args = parser.parse_args()
+    
+    run_agent(args.skill)

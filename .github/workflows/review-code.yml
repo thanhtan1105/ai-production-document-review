@@ -98,21 +98,16 @@ jobs:
       - name: Pull & Load Agent Skills
         run: |
           echo "Setting up Agent Skills hub..."
-          mkdir -p .agent-skills/internal
-          mkdir -p .agent-skills/public
-          
-          # Load public skills (Example)
-          echo "Cloning public skills from GitHub..."
-          git clone https://github.com/ertugrul-dmr/clean-code-skills.git .agent-skills/public/clean-code-skills || echo "Note: Failed to clone public repo, skipping."
-          
+          mkdir -p .agent-skills
+
           # Load internal skills from the repository
           echo "Loading internal skills..."
           if [ -d ".github/skills" ]; then
-            cp -r .github/skills/* .agent-skills/internal/
+            cp -r .github/skills/* .agent-skills/
           else
             echo "No internal skills found at .github/skills."
           fi
-          
+
           echo "=== Successfully Loaded Agent Skills ==="
           echo "Internal Skills:"
           ls -1 .agent-skills/internal/ 2>/dev/null | sed 's/^/- /' || echo "- None"
@@ -148,12 +143,63 @@ jobs:
             echo "full_context.txt" > context_file.txt
           fi
 
-      - name: Run ReAct Agent Orchestrator
+      - name: Review 1 - Coding Standards
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "Starting the Python ReAct Agent..."
-          python3 .github/scripts/react_agent.py
-          
+          echo "Starting Python ReAct Agent for Coding Standards..."
+          python3 .github/scripts/react_agent.py --skill coding-standards
+
+      - name: Review 2 - Security (SAST)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Starting Python ReAct Agent for Security..."
+          python3 .github/scripts/react_agent.py --skill security
+
+      - name: Review 3 - Code Smells
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Starting Python ReAct Agent for Clean Code..."
+          python3 .github/scripts/react_agent.py --skill clean-code
+
+      - name: Review 4 - Performance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Starting Python ReAct Agent for Performance..."
+          python3 .github/scripts/react_agent.py --skill performance
+
+      - name: Review 5 - Testability
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Starting Python ReAct Agent for Testability..."
+          python3 .github/scripts/react_agent.py --skill testability
+
+      - name: Review 6 - Architecture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Starting Python ReAct Agent for Architecture..."
+          python3 .github/scripts/react_agent.py --skill architecture
+
+      - name: Combine Review Reports
+        run: |
+          echo "=== AI CODE REVIEW REPORT ===" > final_review_report.md
+          echo "## 1. Coding Standards & Conventions" >> final_review_report.md
+          cat report_coding-standards.md >> final_review_report.md || echo "No report found." >> final_review_report.md
+          echo -e "\n## 2. Security & Vulnerability" >> final_review_report.md
+          cat report_security.md >> final_review_report.md || echo "No report found." >> final_review_report.md
+          echo -e "\n## 3. Code Smells & Clean Code" >> final_review_report.md
+          cat report_clean-code.md >> final_review_report.md || echo "No report found." >> final_review_report.md
+          echo -e "\n## 4. Performance & Resource Optimization" >> final_review_report.md
+          cat report_performance.md >> final_review_report.md || echo "No report found." >> final_review_report.md
+          echo -e "\n## 5. Testability & Reliability" >> final_review_report.md
+          cat report_testability.md >> final_review_report.md || echo "No report found." >> final_review_report.md
+          echo -e "\n## 6. Architecture & Business Logic" >> final_review_report.md
+          cat report_architecture.md >> final_review_report.md || echo "No report found." >> final_review_report.md
+
           echo "Final report generated:"
           cat final_review_report.md
