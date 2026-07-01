@@ -68,16 +68,25 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install LangChain Agent Dependencies
+      - name: Setup Agent Dependencies
         run: |
           echo "Installing LangChain ReAct Agent dependencies..."
           pip install --quiet \
-            langchain \
-            langchain-ollama \
-            langchain-community \
-            ollama
-          echo "✅ LangChain dependencies installed successfully."
-          python3 -c "from langchain.agents import create_react_agent; print('LangChain import OK')"
+            "langchain>=0.2.0" \
+            "langchain-core>=0.2.0" \
+            "langchain-ollama>=0.1.0" \
+            "langchain-community>=0.2.0"
+          echo "✅ LangChain dependencies installed."
+          echo "Installed versions:"
+          pip show langchain langchain-core langchain-ollama | grep -E "^(Name|Version):"
+          echo "Verifying imports..."
+          python3 -c "
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain.tools import tool
+from langchain_ollama import ChatOllama
+from langchain.prompts import PromptTemplate
+print('✅ All imports OK')
+"
 
       - name: Build Knowledge Source Code (Graph Relation & Retrieval Context)
         id: build_knowledge
