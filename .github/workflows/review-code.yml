@@ -74,19 +74,17 @@ jobs:
 
       - name: Setup Agent Dependencies
         run: |
-          echo "Installing LangChain ReAct Agent dependencies..."
+          echo "Installing latest LangChain + LangGraph stack..."
           pip install --quiet \
-            "langchain>=0.2.0" \
-            "langchain-core>=0.2.0" \
-            "langchain-ollama>=0.1.0" \
-            "langchain-community>=0.2.0"
+            "langchain-core" \
+            "langchain-ollama" \
+            "langgraph"
           echo "Installed versions:"
-          pip show langchain langchain-core langchain-ollama | grep -E "^(Name|Version):"
+          pip show langchain-core langchain-ollama langgraph | grep -E "^(Name|Version):"
           echo "Verifying imports..."
-          python3 -c 'from langchain.agents import AgentExecutor, create_react_agent; print("langchain.agents OK")'
-          python3 -c 'from langchain.tools import tool; print("langchain.tools OK")'
+          python3 -c 'from langchain_core.tools import tool; print("langchain_core.tools OK")'
           python3 -c 'from langchain_ollama import ChatOllama; print("langchain_ollama OK")'
-          python3 -c 'from langchain.prompts import PromptTemplate; print("langchain.prompts OK")'
+          python3 -c 'from langgraph.prebuilt import create_react_agent; print("langgraph.prebuilt OK")'
           echo "Setup Agent Dependencies completed."
 
       - name: Build Knowledge Source Code (Graph Relation & Retrieval Context)

@@ -1,18 +1,19 @@
 """
-LangChain ReAct Code Review Agent
-Uses LangChain's ReAct agent framework with Ollama (local LLM) to perform
-structured, multi-step code reviews.
+LangGraph ReAct Code Review Agent
+Uses LangGraph's prebuilt ReAct agent (modern replacement for AgentExecutor)
+with ChatOllama for local LLM inference.
+
+Compatible with: langchain-core>=0.3, langchain-ollama>=0.2, langgraph>=0.2
 """
 
 import os
 import re
 import argparse
-from typing import Optional
 
-from langchain.agents import AgentExecutor, create_react_agent
-from langchain.tools import tool
+from langchain_core.tools import tool
 from langchain_ollama import ChatOllama
-from langchain.prompts import PromptTemplate
+from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.prebuilt import create_react_agent
 
 
 # ---------------------------------------------------------------------------
@@ -22,9 +23,8 @@ from langchain.prompts import PromptTemplate
 @tool
 def get_diff(input: str = "") -> str:
     """
-    Returns the full code diff / context that needs to be reviewed.
-    Call this FIRST before doing any analysis.
-    No input required.
+    Returns the full code diff or context that needs to be reviewed.
+    Call this FIRST before doing any analysis. No input required.
     """
     try:
         with open("context_file.txt", "r") as f:
@@ -44,8 +44,7 @@ def get_diff(input: str = "") -> str:
 def list_skills(input: str = "") -> str:
     """
     Returns a catalog of available code review skills loaded in .agent-skills/.
-    Use this to discover what skill guidelines are available.
-    No input required.
+    Use this to discover what skill guidelines are available. No input required.
     """
     catalog = []
     for root, dirs, files in os.walk(".agent-skills"):
@@ -77,7 +76,6 @@ def read_skill(skill_name: str) -> str:
     """
     Reads the detailed guidelines for a specific review skill.
     Input: the skill name (e.g. 'security', 'clean-code', 'performance').
-    Use this to load the full instructions for the skill you are executing.
     """
     if not skill_name or not skill_name.strip():
         return "Error: Please provide a skill name (e.g. 'security')."
@@ -100,80 +98,28 @@ def write_report(markdown_content: str) -> str:
     """
     Saves the final review findings to a Markdown report file.
     Input: your complete review report formatted in Markdown.
-    Call this ONCE after completing your full analysis. The report will be
-    saved and included in the final combined review output.
+    Call this ONCE after completing your full analysis.
     """
     if not markdown_content or not markdown_content.strip():
         return "Error: Cannot write an empty report. Provide your Markdown review content."
 
-    # The skill name is stored in the environment so each review step
-    # writes to its own report file.
     skill = os.environ.get("REVIEW_SKILL", "unknown")
     report_path = f"report_{skill}.md"
     try:
         with open(report_path, "w") as f:
             f.write(markdown_content.strip())
-        return f"✅ Report saved successfully to '{report_path}'."
+        return f"Report saved successfully to '{report_path}'."
     except Exception as e:
         return f"Error saving report: {str(e)}"
-
-
-# ---------------------------------------------------------------------------
-# PROMPT TEMPLATE (LangChain ReAct standard format)
-# ---------------------------------------------------------------------------
-
-REACT_TEMPLATE = """\
-You are an autonomous Code Review Agent specializing in '{target_skill}'.
-
-{custom_instructions}
-
-You have access to the following tools:
-
-{tools}
-
-Use the following format EXACTLY for every response:
-
-Thought: [your reasoning about what to do next]
-Action: [the tool name — must be one of: {tool_names}]
-Action Input: [the input to the tool, or empty string if none]
-Observation: [the result of the tool call — this will be filled in for you]
-... (repeat Thought/Action/Action Input/Observation as needed)
-Thought: I have completed my analysis and written the report.
-Final Answer: Code review for '{target_skill}' is complete. Report has been saved.
-
-IMPORTANT RULES:
-- Always call get_diff FIRST to retrieve the code to review.
-- Read the skill guidelines with read_skill before analyzing.
-- Analyse the diff thoroughly against the skill's checklist.
-- Write a comprehensive, structured Markdown report using write_report.
-- End with Final Answer only after the report has been saved.
-
-Begin!
-
-{agent_scratchpad}"""
 
 
 # ---------------------------------------------------------------------------
 # AGENT RUNNER
 # ---------------------------------------------------------------------------
 
-def build_prompt(target_skill: str, custom_instructions: str) -> PromptTemplate:
-    """Constructs the ReAct PromptTemplate with skill-specific instructions."""
-    section = ""
-    if custom_instructions.strip():
-        section = (
-            f"## Specific Review Instructions for '{target_skill}'\n"
-            f"{custom_instructions.strip()}\n"
-            f"---\n"
-        )
-
-    filled = REACT_TEMPLATE.replace("{custom_instructions}", section)
-    return PromptTemplate.from_template(filled)
-
-
 def run_agent(target_skill: str, prompt_file: str = "") -> None:
     print("===========================================")
-    print(f"🚀 Starting LangChain ReAct Agent for Skill: {target_skill}")
+    print(f"Starting LangGraph ReAct Agent for Skill: {target_skill}")
 
     # --- Load custom step prompt ---
     custom_instructions = ""
@@ -181,56 +127,74 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
         try:
             with open(prompt_file, "r") as f:
                 custom_instructions = f.read().strip()
-            print(f"📝 Loaded step prompt from: {prompt_file}")
+            print(f"Loaded step prompt from: {prompt_file}")
         except Exception as e:
-            print(f"⚠️  Could not load step prompt from '{prompt_file}': {e}")
+            print(f"Warning: Could not load step prompt from '{prompt_file}': {e}")
 
     print("===========================================")
 
     # Expose skill name to the write_report tool via environment
     os.environ["REVIEW_SKILL"] = target_skill
 
-    # --- LLM (Ollama running locally on the self-hosted runner) ---
-    ollama_model = os.environ.get("OLLAMA_MODEL", "glm-5.2:cloud")
-    ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/api/chat")
-
-    print(f"🤖 Using model: {ollama_model} @ {ollama_base_url}")
+    # --- LLM ---
+    ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+    ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    print(f"Using model: {ollama_model} @ {ollama_base_url}")
 
     llm = ChatOllama(
         model=ollama_model,
         base_url=ollama_base_url,
-        temperature=0,          # Deterministic for code review
-        num_predict=4096,       # Allow long responses for detailed reports
+        temperature=0,
+        num_predict=4096,
     )
 
     # --- Tools ---
     tools = [get_diff, list_skills, read_skill, write_report]
 
-    # --- Build prompt ---
-    prompt = build_prompt(target_skill, custom_instructions)
+    # --- LangGraph ReAct Agent ---
+    agent = create_react_agent(llm, tools)
 
-    # --- Create LangChain ReAct Agent ---
-    agent = create_react_agent(llm=llm, tools=tools, prompt=prompt)
+    # --- Build the user message ---
+    custom_section = ""
+    if custom_instructions:
+        custom_section = (
+            f"\n\n## Specific Review Instructions for '{target_skill}'\n"
+            f"{custom_instructions}\n"
+            f"---"
+        )
 
-    agent_executor = AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=True,           # Print every Thought/Action/Observation
-        max_iterations=15,      # Max ReAct loop iterations
-        handle_parsing_errors=True,
-        return_intermediate_steps=True,
-    )
+    user_message = f"""You are a Code Review Agent specializing in '{target_skill}'.
+{custom_section}
 
-    # --- Run ---
-    print(f"\n🔍 Starting review for skill: '{target_skill}'\n")
+Your workflow:
+1. Call get_diff to retrieve the code changes to review.
+2. Call read_skill with '{target_skill}' to load the detailed review guidelines.
+3. Analyze the diff thoroughly against the skill guidelines.
+4. Call write_report with your complete Markdown review report.
+
+Important: Always complete all 4 steps. Do not stop before writing the report.
+Start now by calling get_diff.
+"""
+
+    print(f"\nStarting review for skill: '{target_skill}'\n")
+
     try:
-        result = agent_executor.invoke({
-            "target_skill": target_skill,
-        })
-        print("\n✅ Agent completed successfully.")
-        print(f"📄 Final Answer: {result.get('output', '')}")
+        result = agent.invoke(
+            {"messages": [HumanMessage(content=user_message)]},
+            config={"recursion_limit": 30},
+        )
+
+        # Print all messages from the agent run
+        for msg in result.get("messages", []):
+            msg_type = type(msg).__name__
+            if hasattr(msg, "content") and msg.content:
+                content_preview = str(msg.content)[:300]
+                print(f"[{msg_type}]: {content_preview}")
+
+        print("\nAgent completed successfully.")
+
     except Exception as e:
-        print(f"\n❌ Agent encountered an error: {e}")
+        print(f"\nAgent encountered an error: {e}")
         raise SystemExit(1)
 
 
@@ -239,7 +203,7 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="LangChain ReAct Code Review Agent")
+    parser = argparse.ArgumentParser(description="LangGraph ReAct Code Review Agent")
     parser.add_argument(
         "--skill",
         required=True,
