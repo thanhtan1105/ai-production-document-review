@@ -153,42 +153,42 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/coding-standards.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_1.md
+          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/coding-standards/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_1.md
 
       - name: Review 2 - Security (SAST)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/security.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_2.md
+          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/security/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_2.md
 
       - name: Review 3 - Code Smells
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/clean-code.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_3.md
+          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/clean-code/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_3.md
 
       - name: Review 4 - Performance
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/performance.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_4.md
+          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/performance/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_4.md
 
       - name: Review 5 - Testability
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/testability.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_5.md
+          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/testability/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_5.md
 
       - name: Review 6 - Architecture
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           CONTEXT=$(cat context_file.txt)
-          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/architecture.txt) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_6.md
+          ollama launch copilot --model glm-5.2:cloud -- "$(cat .agent-skills/internal/architecture/SKILL.md) \n\n === CODE === \n\n $(cat $CONTEXT)" > report_6.md
 
       - name: Combine Review Reports
         run: |
