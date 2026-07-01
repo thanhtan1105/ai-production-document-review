@@ -1,0 +1,1 @@
+Đánh giá các vấn đề về hiệu năng. Chú ý các vòng lặp lồng nhau O(n^2) hoặc O(n^3). Đề xuất giải pháp tối ưu bộ nhớ và CPU.

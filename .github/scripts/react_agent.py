@@ -62,11 +62,10 @@ TOOLS = {
 
 # --- AGENT CORE ---
 
-def get_system_prompt(target_skill, custom_prompt=""):
+def get_system_prompt(target_skill):
     prompt = f"""You are an autonomous Code Review Agent acting as a specialist in '{target_skill}'.
 Your goal is to analyze the provided code changes specifically focusing on '{target_skill}'.
 
-{f"USER CUSTOM INSTRUCTIONS:\n{custom_prompt}\n" if custom_prompt else ""}
 You have access to the following tools:
 
 1. get_diff: 
@@ -107,11 +106,19 @@ def call_llm(system_prompt, history):
     )
     return result.stdout
 
-def run_agent(target_skill, custom_prompt=""):
+def run_agent(target_skill, prompt_file=""):
     print("===========================================")
     print(f"🚀 Starting Python ReAct Agent for Skill: {target_skill}")
-    if custom_prompt:
-        print(f"📝 Custom Prompt: {custom_prompt}")
+    
+    custom_prompt = ""
+    if prompt_file:
+        try:
+            with open(prompt_file, 'r') as f:
+                custom_prompt = f.read().strip()
+            print(f"📝 Loaded Custom Prompt from: {prompt_file}")
+        except Exception as e:
+            print(f"⚠️ Could not load custom prompt from {prompt_file}: {e}")
+            
     print("===========================================")
     
     system_prompt = get_system_prompt(target_skill, custom_prompt)
@@ -170,7 +177,7 @@ def run_agent(target_skill, custom_prompt=""):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run ReAct Code Review Agent")
     parser.add_argument("--skill", required=True, help="The skill to execute (e.g., security, clean-code)")
-    parser.add_argument("--prompt", required=False, default="", help="Custom prompt or extra instructions for this specific run")
+    parser.add_argument("--prompt-file", required=False, default="", help="Path to a file containing custom prompt or extra instructions for this specific run")
     args = parser.parse_args()
     
-    run_agent(args.skill, args.prompt)
+    run_agent(args.skill, args.prompt_file)

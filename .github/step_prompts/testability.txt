@@ -1,0 +1,1 @@
+Kiểm tra khả năng dễ test của code (Testability). Đảm bảo các function có tính độc lập cao, không bị phụ thuộc cứng (tight coupling) vào dependencies khó mock.

@@ -1,0 +1,1 @@
+Phân tích kỹ các function có Cyclomatic Complexity cao. Chỉ ra những chỗ bị lặp code (DRY principle violation). Gợi ý cách refactor để code clean hơn.

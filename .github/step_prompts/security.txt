@@ -1,0 +1,1 @@
+Đặc biệt rà soát các lỗi bảo mật top 10 OWASP. Tìm kiếm các hardcoded API keys, SQL Injection, XSS, và CSRF vulnerabilities. Báo cáo ngay lập tức nếu phát hiện mã độc tiềm ẩn.

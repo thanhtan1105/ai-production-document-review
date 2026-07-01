@@ -1,0 +1,1 @@
+Chú ý kiểm tra kỹ các quy tắc đặt tên biến theo chuẩn PEP8 cho Python và camelCase cho TypeScript. Bắt buộc cảnh báo nếu phát hiện magic numbers.

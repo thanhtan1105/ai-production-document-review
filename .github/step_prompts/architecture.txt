@@ -1,0 +1,1 @@
+Đánh giá kiến trúc tổng thể của thay đổi. Xem xét liệu pattern đang dùng có phá vỡ cấu trúc MVC/Clean Architecture hiện tại của dự án hay không.
