@@ -99,10 +99,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.COPILOT_TOKEN }}
         run: |
+          # Install GitHub CLI (gh) dynamically if it's missing on the self-hosted runner
+          if ! command -v gh &> /dev/null; then
+            echo "gh CLI not found. Downloading..."
+            curl -sL https://github.com/cli/cli/releases/download/v2.60.1/gh_2.60.1_linux_amd64.tar.gz | tar -xz
+            mkdir -p $HOME/.local/bin
+            cp gh_2.60.1_linux_amd64/bin/gh $HOME/.local/bin/
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+
           echo "Installing GitHub Copilot CLI extension..."
           gh extension install github/gh-copilot
           
-          echo "Verifying available Agent Skills for Code Review..."
+          echo "Verifying available Agent Skills for Code Review (using Ollama + Copilot)..."
           echo "- Skill 1: AST Context Retrieval (code-review-graph) - [OK]"
           echo "- Skill 2: Coding Standards Linter (Prompt-based) - [OK]"
           echo "- Skill 3: SAST Security Scanner (Prompt-based) - [OK]"
