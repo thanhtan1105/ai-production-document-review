@@ -62,10 +62,11 @@ TOOLS = {
 
 # --- AGENT CORE ---
 
-def get_system_prompt(target_skill):
+def get_system_prompt(target_skill, custom_prompt=""):
     prompt = f"""You are an autonomous Code Review Agent acting as a specialist in '{target_skill}'.
 Your goal is to analyze the provided code changes specifically focusing on '{target_skill}'.
 
+{f"USER CUSTOM INSTRUCTIONS:\n{custom_prompt}\n" if custom_prompt else ""}
 You have access to the following tools:
 
 1. get_diff: 
@@ -106,12 +107,14 @@ def call_llm(system_prompt, history):
     )
     return result.stdout
 
-def run_agent(target_skill):
+def run_agent(target_skill, custom_prompt=""):
     print("===========================================")
     print(f"🚀 Starting Python ReAct Agent for Skill: {target_skill}")
+    if custom_prompt:
+        print(f"📝 Custom Prompt: {custom_prompt}")
     print("===========================================")
     
-    system_prompt = get_system_prompt(target_skill)
+    system_prompt = get_system_prompt(target_skill, custom_prompt)
     history = ""
     max_steps = 10
         
@@ -167,6 +170,7 @@ def run_agent(target_skill):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run ReAct Code Review Agent")
     parser.add_argument("--skill", required=True, help="The skill to execute (e.g., security, clean-code)")
+    parser.add_argument("--prompt", required=False, default="", help="Custom prompt or extra instructions for this specific run")
     args = parser.parse_args()
     
-    run_agent(args.skill)
+    run_agent(args.skill, args.prompt)

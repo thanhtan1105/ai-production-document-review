@@ -148,21 +148,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Starting Python ReAct Agent for Coding Standards..."
-          python3 .github/scripts/react_agent.py --skill coding-standards
+          python3 .github/scripts/react_agent.py --skill coding-standards --prompt "Chú ý kiểm tra kỹ các quy tắc đặt tên biến theo chuẩn PEP8 cho Python và camelCase cho TypeScript."
 
       - name: Review 2 - Security (SAST)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Starting Python ReAct Agent for Security..."
-          python3 .github/scripts/react_agent.py --skill security
+          python3 .github/scripts/react_agent.py --skill security --prompt "Đặc biệt rà soát các lỗi bảo mật top 10 OWASP và các hardcoded API keys."
 
       - name: Review 3 - Code Smells
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Starting Python ReAct Agent for Clean Code..."
-          python3 .github/scripts/react_agent.py --skill clean-code
+          python3 .github/scripts/react_agent.py --skill clean-code --prompt "Phân tích kỹ các function có Cyclomatic Complexity cao hơn 10."
 
       - name: Review 4 - Performance
         env:
