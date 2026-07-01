@@ -85,7 +85,7 @@ jobs:
           echo "Verifying imports..."
           python3 -c 'from langchain_core.tools import tool; print("langchain_core.tools OK")'
           python3 -c 'from langchain_ollama import ChatOllama; print("langchain_ollama OK")'
-          python3 -c 'from langchain.agents import create_react_agent; print("langchain.agents OK")'
+          python3 -c 'from langgraph.prebuilt import create_react_agent; print("langgraph.prebuilt OK")'
           echo "Setup Agent Dependencies completed."
 
       - name: Build Knowledge Source Code (Graph Relation & Retrieval Context)
