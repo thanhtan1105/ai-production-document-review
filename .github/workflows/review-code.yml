@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Determine Review Mode
         id: review_mode
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           # Default to partial-review (only review changed code / diff)
           MODE="partial-review"
@@ -44,9 +46,8 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             MODE="${{ github.event.inputs.review_mode }}"
           else
-            # Check if user requested full-review in the comment (e.g., /copilot full-review)
-            COMMENT="${{ github.event.comment.body }}"
-            if [[ "$COMMENT" == *"full-review"* ]]; then
+            # Check if user requested full-review in the comment
+            if [[ "$COMMENT_BODY" == *"full-review"* ]]; then
               MODE="full-review"
             fi
           fi

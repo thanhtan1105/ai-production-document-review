@@ -10,9 +10,11 @@ def get_diff():
     """Returns the code changes."""
     try:
         with open('context_file.txt', 'r') as f:
-            return f.read()
-    except FileNotFoundError:
-        return "Error: context_file.txt not found."
+            target_filename = f.read().strip()
+        with open(target_filename, 'r') as diff_file:
+            return diff_file.read()
+    except Exception as e:
+        return f"Error: Could not read context. Details: {str(e)}"
 
 def list_skills():
     """Returns a list of available review skills from the catalog."""
@@ -62,10 +64,22 @@ TOOLS = {
 
 # --- AGENT CORE ---
 
-def get_system_prompt(target_skill):
+def get_system_prompt(target_skill, custom_prompt=""):
+    custom_prompt_section = ""
+    if custom_prompt:
+        custom_prompt_section = f"""
+
+## Specific Review Instructions for '{target_skill}'
+The following are your detailed, focused instructions for this review step.
+Follow them carefully when analyzing the code:
+
+{custom_prompt}
+
+---"""
+
     prompt = f"""You are an autonomous Code Review Agent acting as a specialist in '{target_skill}'.
 Your goal is to analyze the provided code changes specifically focusing on '{target_skill}'.
-
+{custom_prompt_section}
 You have access to the following tools:
 
 1. get_diff: 
