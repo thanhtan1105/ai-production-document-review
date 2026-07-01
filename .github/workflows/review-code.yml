@@ -34,6 +34,10 @@ jobs:
       issues: write
       id-token: write
 
+    env:
+      OLLAMA_MODEL: "llama3.1:8b"
+      OLLAMA_BASE_URL: "http://localhost:11434"
+
     steps:
       - name: Determine Review Mode
         id: review_mode
@@ -76,17 +80,14 @@ jobs:
             "langchain-core>=0.2.0" \
             "langchain-ollama>=0.1.0" \
             "langchain-community>=0.2.0"
-          echo "✅ LangChain dependencies installed."
           echo "Installed versions:"
           pip show langchain langchain-core langchain-ollama | grep -E "^(Name|Version):"
           echo "Verifying imports..."
-          python3 -c "
-from langchain.agents import AgentExecutor, create_react_agent
-from langchain.tools import tool
-from langchain_ollama import ChatOllama
-from langchain.prompts import PromptTemplate
-print('✅ All imports OK')
-"
+          python3 -c 'from langchain.agents import AgentExecutor, create_react_agent; print("langchain.agents OK")'
+          python3 -c 'from langchain.tools import tool; print("langchain.tools OK")'
+          python3 -c 'from langchain_ollama import ChatOllama; print("langchain_ollama OK")'
+          python3 -c 'from langchain.prompts import PromptTemplate; print("langchain.prompts OK")'
+          echo "Setup Agent Dependencies completed."
 
       - name: Build Knowledge Source Code (Graph Relation & Retrieval Context)
         id: build_knowledge
@@ -155,70 +156,52 @@ print('✅ All imports OK')
 
           # Verify Ollama is running on the self-hosted runner
           if curl -s --max-time 5 http://localhost:11434/api/tags > /dev/null; then
-            echo "✅ Ollama is running."
+            echo "Ollama is running."
             echo "Available models:"
             curl -s http://localhost:11434/api/tags | python3 -c \
               "import sys, json; [print(' -', m['name']) for m in json.load(sys.stdin).get('models', [])]"
           else
-            echo "⚠️  Warning: Ollama not reachable at localhost:11434. Reviews may fail."
+            echo "Warning: Ollama not reachable at localhost:11434. Reviews may fail."
           fi
 
-          echo "✅ Skills loaded: $(ls .agent-skills/ 2>/dev/null | wc -l) skill directories."
-          echo "✅ Step prompts loaded: $(ls .agent-prompts/*.txt 2>/dev/null | wc -l) prompts."
+          echo "Skills loaded: $(ls .agent-skills/ 2>/dev/null | wc -l) skill directories."
+          echo "Step prompts loaded: $(ls .agent-prompts/*.txt 2>/dev/null | wc -l) prompts."
 
           # Determine which context file to use based on REVIEW_MODE
           if [[ "${{ steps.review_mode.outputs.mode }}" == "partial-review" ]]; then
             echo "current_diff.txt" > context_file.txt
-            echo "📋 Review mode: partial (diff only)"
+            echo "Review mode: partial (diff only)"
           else
             echo "full_context.txt" > context_file.txt
-            echo "📋 Review mode: full (entire codebase)"
+            echo "Review mode: full (entire codebase)"
           fi
 
       - name: Review 1 - Coding Standards
-        env:
-          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'llama3.1:8b' }}
-          OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL || 'http://localhost:11434' }}
         run: |
           echo "Starting LangChain ReAct Agent for Coding Standards..."
           python3 .github/scripts/react_agent.py --skill coding-standards --prompt-file .agent-prompts/coding-standards.txt
 
       - name: Review 2 - Security (SAST)
-        env:
-          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'llama3.1:8b' }}
-          OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL || 'http://localhost:11434' }}
         run: |
           echo "Starting LangChain ReAct Agent for Security..."
           python3 .github/scripts/react_agent.py --skill security --prompt-file .agent-prompts/security.txt
 
       - name: Review 3 - Code Smells
-        env:
-          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'llama3.1:8b' }}
-          OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL || 'http://localhost:11434' }}
         run: |
           echo "Starting LangChain ReAct Agent for Clean Code..."
           python3 .github/scripts/react_agent.py --skill clean-code --prompt-file .agent-prompts/clean-code.txt
 
       - name: Review 4 - Performance
-        env:
-          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'llama3.1:8b' }}
-          OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL || 'http://localhost:11434' }}
         run: |
           echo "Starting LangChain ReAct Agent for Performance..."
           python3 .github/scripts/react_agent.py --skill performance --prompt-file .agent-prompts/performance.txt
 
       - name: Review 5 - Testability
-        env:
-          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'llama3.1:8b' }}
-          OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL || 'http://localhost:11434' }}
         run: |
           echo "Starting LangChain ReAct Agent for Testability..."
           python3 .github/scripts/react_agent.py --skill testability --prompt-file .agent-prompts/testability.txt
 
       - name: Review 6 - Architecture
-        env:
-          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL || 'llama3.1:8b' }}
-          OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL || 'http://localhost:11434' }}
         run: |
           echo "Starting LangChain ReAct Agent for Architecture..."
           python3 .github/scripts/react_agent.py --skill architecture --prompt-file .agent-prompts/architecture.txt
