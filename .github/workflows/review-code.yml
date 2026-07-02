@@ -109,18 +109,16 @@ jobs:
 
       - name: Setup Agent Dependencies
         run: |
-          echo "Installing latest LangChain + LangGraph stack..."
+          echo "Installing LangChain Ollama review dependencies..."
           pip install --quiet \
             "langchain" \
             "langchain-core" \
-            "langchain-ollama" \
-            "langgraph"
+            "langchain-ollama"
           echo "Installed versions:"
-          pip show langchain langchain-core langchain-ollama langgraph | grep -E "^(Name|Version):"
+          pip show langchain langchain-core langchain-ollama | grep -E "^(Name|Version):"
           echo "Verifying imports..."
-          python3 -c 'from langchain_core.tools import tool; print("langchain_core.tools OK")'
+          python3 -c 'from langchain_core.messages import HumanMessage, SystemMessage; print("langchain_core.messages OK")'
           python3 -c 'from langchain_ollama import ChatOllama; print("langchain_ollama OK")'
-          python3 -c 'from langgraph.prebuilt import create_react_agent; print("langgraph.prebuilt OK")'
           echo "Setup Agent Dependencies completed."
 
       - name: Build Knowledge Source Code (Graph Relation & Retrieval Context)
@@ -199,7 +197,7 @@ jobs:
 
       - name: Setup & Verify Agent
         run: |
-          echo "=== Verifying LangChain ReAct Agent Setup ==="
+          echo "=== Verifying LangChain Review Agent Setup ==="
 
           # Verify Ollama is running on the self-hosted runner
           if curl -s --max-time 5 http://localhost:11434/api/tags > /dev/null; then
@@ -225,32 +223,32 @@ jobs:
 
       - name: Review 1 - Coding Standards
         run: |
-          echo "Starting LangChain ReAct Agent for Coding Standards..."
+          echo "Starting chunked LangChain reviewer for Coding Standards..."
           python3 .github/scripts/react_agent.py --skill coding-standards --prompt-file .agent-prompts/coding-standards.txt
 
       - name: Review 2 - Security (SAST)
         run: |
-          echo "Starting LangChain ReAct Agent for Security..."
+          echo "Starting chunked LangChain reviewer for Security..."
           python3 .github/scripts/react_agent.py --skill security --prompt-file .agent-prompts/security.txt
 
       - name: Review 3 - Code Smells
         run: |
-          echo "Starting LangChain ReAct Agent for Clean Code..."
+          echo "Starting chunked LangChain reviewer for Clean Code..."
           python3 .github/scripts/react_agent.py --skill clean-code --prompt-file .agent-prompts/clean-code.txt
 
       - name: Review 4 - Performance
         run: |
-          echo "Starting LangChain ReAct Agent for Performance..."
+          echo "Starting chunked LangChain reviewer for Performance..."
           python3 .github/scripts/react_agent.py --skill performance --prompt-file .agent-prompts/performance.txt
 
       - name: Review 5 - Testability
         run: |
-          echo "Starting LangChain ReAct Agent for Testability..."
+          echo "Starting chunked LangChain reviewer for Testability..."
           python3 .github/scripts/react_agent.py --skill testability --prompt-file .agent-prompts/testability.txt
 
       - name: Review 6 - Architecture
         run: |
-          echo "Starting LangChain ReAct Agent for Architecture..."
+          echo "Starting chunked LangChain reviewer for Architecture..."
           python3 .github/scripts/react_agent.py --skill architecture --prompt-file .agent-prompts/architecture.txt
 
       - name: Combine Review Reports
