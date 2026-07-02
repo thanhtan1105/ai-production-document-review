@@ -253,22 +253,8 @@ jobs:
 
       - name: Combine Review Reports
         run: |
-          echo "=== AI CODE REVIEW REPORT ===" > final_review_report.md
-          echo "## 1. Coding Standards & Conventions" >> final_review_report.md
-          cat report_coding-standards.md >> final_review_report.md || echo "No report found." >> final_review_report.md
-          echo -e "\n## 2. Security & Vulnerability" >> final_review_report.md
-          cat report_security.md >> final_review_report.md || echo "No report found." >> final_review_report.md
-          echo -e "\n## 3. Code Smells & Clean Code" >> final_review_report.md
-          cat report_clean-code.md >> final_review_report.md || echo "No report found." >> final_review_report.md
-          echo -e "\n## 4. Performance & Resource Optimization" >> final_review_report.md
-          cat report_performance.md >> final_review_report.md || echo "No report found." >> final_review_report.md
-          echo -e "\n## 5. Testability & Reliability" >> final_review_report.md
-          cat report_testability.md >> final_review_report.md || echo "No report found." >> final_review_report.md
-          echo -e "\n## 6. Architecture & Business Logic" >> final_review_report.md
-          cat report_architecture.md >> final_review_report.md || echo "No report found." >> final_review_report.md
-
-          echo "Final report generated:"
-          cat final_review_report.md
+          echo "Generating high-level final review summary..."
+          python3 .github/scripts/summarize_reports.py
 
       - name: Upload Review Reports as Artifact
         uses: actions/upload-artifact@v4
