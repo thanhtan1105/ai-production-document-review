@@ -98,6 +98,31 @@ def read_skill(skill_name: str) -> str:
 
 
 @tool
+def read_file(filepath: str) -> str:
+    """
+    Reads the full text contents of a specific file in the repository.
+    Input: the relative path to the file (e.g. 'backend/app/main.py').
+    Use this if get_diff only returns a list of files and you need to inspect their contents.
+    """
+    if not filepath or not filepath.strip():
+        return "Error: Please provide a filepath."
+
+    filepath = filepath.strip()
+    try:
+        if not os.path.exists(filepath):
+            return f"Error: File '{filepath}' does not exist."
+        if not os.path.isfile(filepath):
+            return f"Error: '{filepath}' is not a file."
+            
+        with open(filepath, "r") as f:
+            content = f.read()
+        print(f"[read_file] Read {len(content)} chars from '{filepath}'.")
+        return content
+    except Exception as e:
+        return f"Exception while reading file '{filepath}': {str(e)}"
+
+
+@tool
 def write_report(markdown_content: str) -> str:
     """
     Saves the final review findings to a Markdown report file.
@@ -154,7 +179,7 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
     )
 
     # --- Tools ---
-    tools = [get_diff, list_skills, read_skill, write_report]
+    tools = [get_diff, list_skills, read_skill, read_file, write_report]
 
     # --- LangGraph ReAct Agent ---
     agent = create_react_agent(llm, tools)
@@ -181,12 +206,13 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
 {custom_section}
 
 Your workflow:
-1. Call get_diff to retrieve the code changes to review.
+1. Call get_diff to retrieve the code changes or project context.
 2. Call read_skill with '{target_skill}' to load the detailed review guidelines.
-3. Analyze the diff thoroughly against the skill guidelines.
-4. Call write_report with your complete Markdown review report.
+3. If get_diff returned a Project Graph or a list of files instead of raw code, you MUST use the `read_file` tool to inspect the contents of the files before reviewing.
+4. Analyze the code thoroughly against the skill guidelines.
+5. Call write_report with your complete Markdown review report.
 
-Important: Always complete all 4 steps. Do not stop before writing the report.
+Important: Always complete all 5 steps. Do not stop before writing the report.
 Start now by calling get_diff.
 """
 
