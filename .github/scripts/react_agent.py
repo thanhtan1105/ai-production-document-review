@@ -167,7 +167,16 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
             f"---"
         )
 
-    user_message = f"""You are a Code Review Agent specializing in '{target_skill}'.
+    # --- Target context ---
+    review_target = os.environ.get("REVIEW_TARGET", "all")
+    target_context = ""
+    if review_target in ["backend", "frontend"]:
+        target_context = (
+            f"\n\n**CRITICAL CONTEXT**: You are reviewing the **{review_target.upper()}** codebase exclusively. "
+            f"Focus your analysis, standards, and recommendations strictly on {review_target}-specific technologies and paradigms."
+        )
+
+    user_message = f"""You are a Code Review Agent specializing in '{target_skill}'.{target_context}
 {custom_section}
 
 Your workflow:
