@@ -152,11 +152,12 @@ jobs:
             echo "current_diff.txt" > context_file.txt
           else
             echo "=> Extracting full context (scope: ${PATHSPEC:-all files}, excluding junk)..."
-            echo "=== PROJECT GRAPH STRUCTURE ===" > full_context.txt
-            code-review-graph status >> full_context.txt || echo "Graph not available" >> full_context.txt
+            echo "=== FULL SOURCE CODE (target: ${{ steps.review_mode.outputs.target }}) ===" > full_context.txt
+            # diff against empty tree hash (4b82...) dumps the ENTIRE current codebase
+            eval "git diff 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD -- $PATHSPEC $EXCLUDES >> full_context.txt"
             echo "" >> full_context.txt
-            echo "=== LIST OF FILES TO REVIEW (Target: ${{ steps.review_mode.outputs.target }}) ===" >> full_context.txt
-            eval "git ls-files -- $PATHSPEC $EXCLUDES >> full_context.txt"
+            echo "=== PROJECT GRAPH STRUCTURE ===" >> full_context.txt
+            code-review-graph status >> full_context.txt || echo "Graph not available" >> full_context.txt
             echo "full_context.txt" > context_file.txt
           fi
 

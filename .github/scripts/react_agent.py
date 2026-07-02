@@ -16,6 +16,13 @@ from langgraph.prebuilt import create_react_agent  # noqa: LangGraph prebuilt (l
 
 
 # ---------------------------------------------------------------------------
+# GLOBALS FOR CHUNKING
+# ---------------------------------------------------------------------------
+CURRENT_CHUNK = ""
+CURRENT_REPORT = ""
+
+
+# ---------------------------------------------------------------------------
 # TOOLS
 # ---------------------------------------------------------------------------
 
@@ -27,21 +34,13 @@ def get_diff(input: str = "") -> str:
     Correct usage: get_diff (no input)
     Wrong usage: get_diff(format='unified') <- DO NOT do this
     """
-    try:
-        with open("context_file.txt", "r") as f:
-            target_filename = f.read().strip()
-        with open(target_filename, "r") as diff_file:
-            content = diff_file.read()
-        if not content.strip():
-            return "Warning: The diff/context file is empty. Nothing to review."
-        # Show a preview so the agent knows it received real content
-        preview = content[:200].replace('\n', ' ')
-        print(f"[get_diff] Read {len(content)} chars from '{target_filename}'. Preview: {preview}...")
-        return content
-    except FileNotFoundError as e:
-        return f"Error: Could not read context file. Details: {str(e)}"
-    except Exception as e:
-        return f"Error: Unexpected error reading diff. Details: {str(e)}"
+    global CURRENT_CHUNK
+    if not CURRENT_CHUNK.strip():
+        return "Warning: The diff/context chunk is empty. Nothing to review."
+    # Show a preview so the agent knows it received real content
+    preview = CURRENT_CHUNK[:200].replace('\n', ' ')
+    print(f"[get_diff] Read {len(CURRENT_CHUNK)} chars. Preview: {preview}...")
+    return CURRENT_CHUNK
 
 
 @tool
@@ -98,48 +97,46 @@ def read_skill(skill_name: str) -> str:
 
 
 @tool
-def read_file(filepath: str) -> str:
-    """
-    Reads the full text contents of a specific file in the repository.
-    Input: the relative path to the file (e.g. 'backend/app/main.py').
-    Use this if get_diff only returns a list of files and you need to inspect their contents.
-    """
-    if not filepath or not filepath.strip():
-        return "Error: Please provide a filepath."
-
-    filepath = filepath.strip()
-    try:
-        if not os.path.exists(filepath):
-            return f"Error: File '{filepath}' does not exist."
-        if not os.path.isfile(filepath):
-            return f"Error: '{filepath}' is not a file."
-            
-        with open(filepath, "r") as f:
-            content = f.read()
-        print(f"[read_file] Read {len(content)} chars from '{filepath}'.")
-        return content
-    except Exception as e:
-        return f"Exception while reading file '{filepath}': {str(e)}"
-
-
-@tool
 def write_report(markdown_content: str) -> str:
     """
     Saves the final review findings to a Markdown report file.
     Input: your complete review report formatted in Markdown.
     Call this ONCE after completing your full analysis.
     """
+    global CURRENT_REPORT
     if not markdown_content or not markdown_content.strip():
         return "Error: Cannot write an empty report. Provide your Markdown review content."
 
-    skill = os.environ.get("REVIEW_SKILL", "unknown")
-    report_path = f"report_{skill}.md"
-    try:
-        with open(report_path, "w") as f:
-            f.write(markdown_content.strip())
-        return f"Report saved successfully to '{report_path}'."
-    except Exception as e:
-        return f"Error saving report: {str(e)}"
+    CURRENT_REPORT = markdown_content.strip()
+    return "Report captured successfully for this chunk."
+
+
+# ---------------------------------------------------------------------------
+# MAP-REDUCE CHUNKING LOGIC
+# ---------------------------------------------------------------------------
+
+def chunk_diff(payload: str, max_chars: int = 30000) -> list[str]:
+    """Splits a large diff into chunks without breaking individual files."""
+    if len(payload) <= max_chars:
+        return [payload]
+    
+    parts = re.split(r'(?=diff --git )', payload)
+    chunks = []
+    current_chunk = ""
+    
+    for part in parts:
+        if not part.strip():
+            continue
+        if len(current_chunk) + len(part) > max_chars and current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = part
+        else:
+            current_chunk += part
+            
+    if current_chunk:
+        chunks.append(current_chunk)
+        
+    return chunks
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +144,7 @@ def write_report(markdown_content: str) -> str:
 # ---------------------------------------------------------------------------
 
 def run_agent(target_skill: str, prompt_file: str = "") -> None:
+    global CURRENT_CHUNK, CURRENT_REPORT
     print("===========================================")
     print(f"Starting LangGraph ReAct Agent for Skill: {target_skill}")
 
@@ -165,7 +163,20 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
     # Expose skill name to the write_report tool via environment
     os.environ["REVIEW_SKILL"] = target_skill
 
-    # --- LLM ---
+    # --- Read Full Payload from Context File ---
+    try:
+        with open("context_file.txt", "r") as f:
+            target_filename = f.read().strip()
+        with open(target_filename, "r") as diff_file:
+            full_payload = diff_file.read()
+    except Exception as e:
+        print(f"Error reading context file: {e}")
+        raise SystemExit(1)
+        
+    chunks = chunk_diff(full_payload, max_chars=30000)
+    print(f"Diff chunked into {len(chunks)} parts.")
+
+    # --- LLM Setup ---
     ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
     ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     print(f"Using model: {ollama_model} @ {ollama_base_url}")
@@ -178,10 +189,7 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
         num_ctx=128000,
     )
 
-    # --- Tools ---
-    tools = [get_diff, list_skills, read_skill, read_file, write_report]
-
-    # --- LangGraph ReAct Agent ---
+    tools = [get_diff, list_skills, read_skill, write_report]
     agent = create_react_agent(llm, tools)
 
     # --- Build the user message ---
@@ -193,7 +201,6 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
             f"---"
         )
 
-    # --- Target context ---
     review_target = os.environ.get("REVIEW_TARGET", "all")
     target_context = ""
     if review_target in ["backend", "frontend"]:
@@ -206,87 +213,90 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
 {custom_section}
 
 Your workflow:
-1. Call get_diff to retrieve the code changes or project context.
+1. Call get_diff to retrieve the code changes or project context for this specific chunk.
 2. Call read_skill with '{target_skill}' to load the detailed review guidelines.
-3. If get_diff returned a Project Graph or a list of files instead of raw code, you MUST use the `read_file` tool to inspect the contents of the files before reviewing.
-4. Analyze the code thoroughly against the skill guidelines.
-5. Call write_report with your complete Markdown review report.
+3. Analyze the diff thoroughly against the skill guidelines.
+4. Call write_report with your complete Markdown review report for this chunk.
 
-Important: Always complete all 5 steps. Do not stop before writing the report.
+Important: Always complete all 4 steps. Do not stop before writing the report.
 Start now by calling get_diff.
 """
 
-    print(f"\nStarting review for skill: '{target_skill}'\n")
+    print(f"\nStarting chunked review for skill: '{target_skill}'\n")
 
     report_path = f"report_{target_skill}.md"
+    if os.path.exists(report_path):
+        os.remove(report_path)
 
-    # ---------------------------------------------------------------------------
-    # RETRY LOOP — max 20 attempts
-    # Each attempt runs the agent; if the report is not created (agent ran out
-    # of steps or failed to call write_report), retry with a fresh invocation.
-    # ---------------------------------------------------------------------------
+    final_reports = []
     MAX_ATTEMPTS = 20
-    success = False
 
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    for i, chunk in enumerate(chunks):
         print(f"\n{'='*50}")
-        print(f"  Attempt {attempt}/{MAX_ATTEMPTS} — skill: '{target_skill}'")
+        print(f"  Processing Chunk {i+1}/{len(chunks)} — skill: '{target_skill}'")
         print(f"{'='*50}")
+        
+        CURRENT_CHUNK = chunk
+        chunk_success = False
+        
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            CURRENT_REPORT = ""
+            
+            try:
+                result = agent.invoke(
+                    {"messages": [HumanMessage(content=user_message)]},
+                    config={"recursion_limit": 100},
+                )
 
-        # Remove stale report from a previous failed attempt so we can detect
-        # whether this attempt actually wrote it.
-        if os.path.exists(report_path):
-            os.remove(report_path)
+                # Print agent messages
+                for msg in result.get("messages", []):
+                    msg_type = type(msg).__name__
+                    if hasattr(msg, "content") and msg.content:
+                        content_preview = str(msg.content)[:500].replace("\n", " ")
+                        print(f"  [{msg_type}]: {content_preview}")
 
-        try:
-            result = agent.invoke(
-                {"messages": [HumanMessage(content=user_message)]},
-                config={"recursion_limit": 100},
-            )
-
-            # Print agent messages
-            for msg in result.get("messages", []):
-                msg_type = type(msg).__name__
-                if hasattr(msg, "content") and msg.content:
-                    content_preview = str(msg.content)[:500]
-                    print(f"  [{msg_type}]: {content_preview}")
-
-        except Exception as e:
-            print(f"  [Attempt {attempt}] Agent raised an exception: {e}")
-            if attempt == MAX_ATTEMPTS:
-                print("All attempts exhausted with exceptions. Failing.")
-                raise SystemExit(1)
-            print(f"  Retrying... ({attempt + 1}/{MAX_ATTEMPTS})")
-            continue
-
-        # --- Check if the report was written this attempt ---
-        if os.path.exists(report_path) and os.path.getsize(report_path) > 0:
-            report_size = os.path.getsize(report_path)
-            print(f"\n  Report verified: '{report_path}' ({report_size} bytes)")
-            print(f"  Review for '{target_skill}' completed on attempt {attempt}/{MAX_ATTEMPTS}.")
-            success = True
-            break
-        else:
-            print(f"\n  [Attempt {attempt}] Report NOT created — agent did not call write_report.")
-            if attempt < MAX_ATTEMPTS:
+            except Exception as e:
+                print(f"  [Attempt {attempt}] Agent raised an exception: {e}")
+                if attempt == MAX_ATTEMPTS:
+                    print(f"All attempts exhausted for chunk {i+1}. Failing.")
+                    raise SystemExit(1)
                 print(f"  Retrying... ({attempt + 1}/{MAX_ATTEMPTS})")
+                continue
+
+            # --- Check if the report was captured this attempt ---
+            if CURRENT_REPORT:
+                print(f"\n  Report for chunk {i+1} captured successfully.")
+                final_reports.append(f"### Review Part {i+1}\n\n{CURRENT_REPORT}")
+                chunk_success = True
+                break
             else:
-                print("  All attempts exhausted. Failing.")
+                print(f"\n  [Attempt {attempt}] Report NOT created — agent did not call write_report.")
+                if attempt < MAX_ATTEMPTS:
+                    print(f"  Retrying... ({attempt + 1}/{MAX_ATTEMPTS})")
+                else:
+                    print(f"  All attempts exhausted for chunk {i+1}. Failing.")
 
-    if not success:
-        print(f"\nERROR: '{report_path}' was not generated after {MAX_ATTEMPTS} attempts.")
-        print("The agent consistently failed to complete the review. Check model/Ollama logs.")
+        if not chunk_success:
+            print(f"\nERROR: Failed to generate report for chunk {i+1} after {MAX_ATTEMPTS} attempts.")
+            raise SystemExit(1)
+
+    print(f"\nReview for '{target_skill}' completed successfully across {len(chunks)} chunks.")
+
+    # --- Write Aggregated Report ---
+    aggregated_markdown = f"# Code Review Report: {target_skill}\n\n" + "\n\n---\n\n".join(final_reports)
+    try:
+        with open(report_path, "w") as f:
+            f.write(aggregated_markdown)
+    except Exception as e:
+        print(f"Error saving final aggregated report: {e}")
         raise SystemExit(1)
-
-    print(f"\nReview for '{target_skill}' completed successfully.")
 
     # --- Print report content to log for quick debugging ---
     separator = "=" * 60
     print(f"\n{separator}")
-    print(f"  REPORT: {report_path}")
+    print(f"  AGGREGATED REPORT: {report_path}")
     print(f"{separator}")
-    with open(report_path, "r") as f:
-        print(f.read())
+    print(aggregated_markdown)
     print(f"{separator}\n")
 
 
@@ -298,14 +308,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LangGraph ReAct Code Review Agent")
     parser.add_argument(
         "--skill",
+        type=str,
         required=True,
-        help="The review skill to execute (e.g. security, clean-code, performance)",
+        help="The specific review skill to apply (e.g. coding-standards, security).",
     )
     parser.add_argument(
         "--prompt-file",
-        required=False,
+        type=str,
         default="",
-        help="Path to a .txt file with focused review instructions for this skill",
+        help="Path to the custom step prompt text file.",
     )
     args = parser.parse_args()
 
