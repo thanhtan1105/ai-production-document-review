@@ -86,7 +86,7 @@ jobs:
           case "$TARGET" in
             backend)  PATHSPEC="backend/" ;;
             frontend) PATHSPEC="frontend/" ;;
-            *)        PATHSPEC="" ;; # empty = review everything
+            *)        PATHSPEC="." ;; # use '.' for all files so we can combine with exclude
           esac
 
           echo "target=$TARGET" >> $GITHUB_OUTPUT
@@ -140,17 +140,17 @@ jobs:
 
           # 3. Extract Context — scoped to PATHSPEC if set
           if [[ "${{ steps.review_mode.outputs.mode }}" == "partial-review" ]]; then
-            echo "=> Analyzing changed code (scope: ${PATHSPEC:-all files})..."
-            git diff HEAD~1 HEAD -- $PATHSPEC > raw_diff.txt
+            echo "=> Analyzing changed code (scope: ${PATHSPEC:-all files}, excluding .github/)..."
+            git diff HEAD~1 HEAD -- $PATHSPEC ':(exclude).github/' > raw_diff.txt
             echo "=== RAW DIFF (target: ${{ steps.review_mode.outputs.target }}) ===" > current_diff.txt
             cat raw_diff.txt >> current_diff.txt
             echo "=== CODE REVIEW GRAPH IMPACT ===" >> current_diff.txt
             code-review-graph detect-changes >> current_diff.txt || echo "No impact found" >> current_diff.txt
             echo "current_diff.txt" > context_file.txt
           else
-            echo "=> Extracting full context (scope: ${PATHSPEC:-all files})..."
+            echo "=> Extracting full context (scope: ${PATHSPEC:-all files}, excluding .github/)..."
             echo "=== GIT DIFF (last 3 commits | target: ${{ steps.review_mode.outputs.target }}) ===" > full_context.txt
-            git diff HEAD~3 HEAD -- $PATHSPEC >> full_context.txt || git diff HEAD~1 HEAD -- $PATHSPEC >> full_context.txt
+            git diff HEAD~3 HEAD -- $PATHSPEC ':(exclude).github/' >> full_context.txt || git diff HEAD~1 HEAD -- $PATHSPEC ':(exclude).github/' >> full_context.txt
             echo "" >> full_context.txt
             echo "=== PROJECT GRAPH STRUCTURE ===" >> full_context.txt
             code-review-graph status >> full_context.txt || echo "Graph not available" >> full_context.txt
@@ -267,3 +267,12 @@ jobs:
 
           echo "Final report generated:"
           cat final_review_report.md
+
+      - name: Upload Review Reports as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-code-review-reports
+          path: |
+            final_review_report.md
+            report_*.md
+          retention-days: 14
