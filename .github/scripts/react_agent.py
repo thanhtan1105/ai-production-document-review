@@ -150,6 +150,7 @@ def run_agent(target_skill: str, prompt_file: str = "") -> None:
         base_url=ollama_base_url,
         temperature=0,
         num_predict=4096,
+        num_ctx=128000,
     )
 
     # --- Tools ---

@@ -138,20 +138,23 @@ jobs:
           # 2. Build Knowledge Base Graph from source code
           code-review-graph build
 
+          # Exclude common non-code / junk files from diff to reduce LLM context load
+          EXCLUDES="':(exclude).github/' ':(exclude)*.lock' ':(exclude)*-lock.json' ':(exclude)LICENSE' ':(exclude).gitignore' ':(exclude)*.svg'"
+
           # 3. Extract Context — scoped to PATHSPEC if set
           if [[ "${{ steps.review_mode.outputs.mode }}" == "partial-review" ]]; then
-            echo "=> Analyzing changed code (scope: ${PATHSPEC:-all files}, excluding .github/)..."
-            git diff HEAD~1 HEAD -- $PATHSPEC ':(exclude).github/' > raw_diff.txt
+            echo "=> Analyzing changed code (scope: ${PATHSPEC:-all files}, excluding junk)..."
+            eval "git diff HEAD~1 HEAD -- $PATHSPEC $EXCLUDES > raw_diff.txt"
             echo "=== RAW DIFF (target: ${{ steps.review_mode.outputs.target }}) ===" > current_diff.txt
             cat raw_diff.txt >> current_diff.txt
             echo "=== CODE REVIEW GRAPH IMPACT ===" >> current_diff.txt
             code-review-graph detect-changes >> current_diff.txt || echo "No impact found" >> current_diff.txt
             echo "current_diff.txt" > context_file.txt
           else
-            echo "=> Extracting full context (scope: ${PATHSPEC:-all files}, excluding .github/)..."
+            echo "=> Extracting full context (scope: ${PATHSPEC:-all files}, excluding junk)..."
             echo "=== FULL SOURCE CODE (target: ${{ steps.review_mode.outputs.target }}) ===" > full_context.txt
             # diff against empty tree hash (4b82...) dumps the ENTIRE current codebase
-            git diff 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD -- $PATHSPEC ':(exclude).github/' >> full_context.txt
+            eval "git diff 4b825dc642cb6eb9a060e54bf8d69288fbee4904 HEAD -- $PATHSPEC $EXCLUDES >> full_context.txt"
             echo "" >> full_context.txt
             echo "=== PROJECT GRAPH STRUCTURE ===" >> full_context.txt
             code-review-graph status >> full_context.txt || echo "Graph not available" >> full_context.txt
