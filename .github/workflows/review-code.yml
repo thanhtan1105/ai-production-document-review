@@ -256,6 +256,54 @@ jobs:
           echo "Generating high-level final review summary..."
           python3 .github/scripts/summarize_reports.py
 
+      - name: Reply With Final Review Report
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const reportPath = 'final_review_report.md';
+            if (!fs.existsSync(reportPath)) {
+              core.setFailed(`${reportPath} was not generated.`);
+              return;
+            }
+
+            const report = fs.readFileSync(reportPath, 'utf8').trim();
+            const header = [
+              '## Copilot AI Review Result',
+              '',
+              `- Review mode: \`${{ steps.review_mode.outputs.mode }}\``,
+              `- Review target: \`${{ steps.review_mode.outputs.target }}\``,
+              '',
+            ].join('\n');
+
+            let body = `${header}${report}`;
+            const maxCommentLength = 65000;
+            if (body.length > maxCommentLength) {
+              body = `${body.slice(0, maxCommentLength)}\n\n_Report truncated because it exceeded GitHub comment length limits. Download the full artifact for complete details._`;
+            }
+
+            const { owner, repo } = context.repo;
+
+            if (context.eventName === 'pull_request_review_comment') {
+              await github.rest.pulls.createReplyForReviewComment({
+                owner,
+                repo,
+                pull_number: context.payload.pull_request.number,
+                comment_id: context.payload.comment.id,
+                body,
+              });
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
       - name: Upload Review Reports as Artifact
         uses: actions/upload-artifact@v4
         with:
